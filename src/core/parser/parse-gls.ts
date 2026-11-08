@@ -6,6 +6,7 @@ import type {
 } from "../model/gls-model";
 import {
   type EventCandidate,
+  type EventCategoryHeadersCandidate,
   validateEvents,
 } from "../validator/validate-events";
 import {
@@ -18,6 +19,25 @@ import {
 } from "../validator/validate-transitions";
 
 type BodyLine = { text: string; line: number };
+
+function readQuotedNames(
+  source: string,
+  label: string,
+): { names: string[] } | { error: string } {
+  const names: string[] = [];
+  let rest = source.replace(/^ +/, "");
+  while (true) {
+    if (!rest) return { error: `${label}が必要` };
+    const quoted = /^"([^"\r\n]*)"/.exec(rest);
+    if (!quoted) return { error: `${label}の構文が不正` };
+    names.push(quoted[1]);
+    rest = rest.slice(quoted[0].length).replace(/^ +/, "");
+    if (!rest) return { names };
+    if (!rest.startsWith(">"))
+      return { error: `${label}の構文が不正(区切り>が必要)` };
+    rest = rest.slice(1).replace(/^ +/, "");
+  }
+}
 type Block =
   | {
       kind: "state";
@@ -41,6 +61,7 @@ type Block =
 export function parseGls(source: string): ParseResult {
   const states: StateCandidate[] = [];
   const events: EventCandidate[] = [];
+  const headers: EventCategoryHeadersCandidate[] = [];
   const transitions: TransitionCandidate[] = [];
   const diagnostics: GlsDiagnostic[] = [];
   let current: Block | undefined;
@@ -93,7 +114,8 @@ export function parseGls(source: string): ParseResult {
     afterEvent = false;
     const state =
       /^State +([^ ]+) +as +"([^"\r\n]*)" +color +"([^"]*)": *$/.exec(line);
-    const event = /^Event +([^ ]+) +as +"([^"\r\n]*)" *$/.exec(line);
+    const event = /^Event +([^ ]+) +as +"([^"\r\n]*)"(.*)$/.exec(line);
+    const header = /^EventCategoryHeaders\b([\s\S]*)$/.exec(line);
     const transition =
       /^Transition +([^ ]+) +on +([^ ]+) +-> +([^ :]+): *$/.exec(line);
     if (state)
@@ -106,11 +128,42 @@ export function parseGls(source: string): ParseResult {
         body: [],
       };
     else if (event) {
+      const suffix = event[3];
+      let categoryPath: string[] | undefined;
+      if (!/^ *$/.test(suffix)) {
+        const category = /^ +in(?: +(.*))?$/.exec(suffix);
+        const parsed = category
+          ? readQuotedNames(category[1] ?? "", "分類経路の分類名")
+          : { error: "分類経路の構文が不正" };
+        if ("error" in parsed)
+          diagnostics.push({
+            code: category ? "category-syntax" : "syntax",
+            line: lineNumber,
+            message: parsed.error,
+          });
+        else categoryPath = parsed.names;
+      }
       events.push({
         line: lineNumber,
-        event: { id: event[1], name: event[2] },
+        event: {
+          id: event[1],
+          name: event[2],
+          ...(categoryPath ? { categoryPath } : {}),
+        },
       });
       afterEvent = true;
+    } else if (header) {
+      const parsed =
+        /^ +/.test(header[1]) || !header[1]
+          ? readQuotedNames(header[1], "列見出し名")
+          : { error: "列見出しの構文が不正" };
+      if ("error" in parsed)
+        diagnostics.push({
+          code: "category-headers-syntax",
+          line: lineNumber,
+          message: parsed.error,
+        });
+      else headers.push({ names: parsed.names, line: lineNumber });
     } else if (transition)
       current = {
         kind: "transition",
@@ -133,7 +186,7 @@ export function parseGls(source: string): ParseResult {
   }
   finish();
   diagnostics.push(...validateStates(states));
-  diagnostics.push(...validateEvents(events));
+  diagnostics.push(...validateEvents(events, headers));
   diagnostics.push(
     ...validateTransitions(
       transitions,
@@ -148,6 +201,7 @@ export function parseGls(source: string): ParseResult {
           states: states.map((item) => item.state),
           events: events.map((item) => item.event),
           transitions: transitions.map((item) => item.transition),
+          ...(headers.length ? { eventCategoryHeaders: headers[0].names } : {}),
         },
     diagnostics,
   };

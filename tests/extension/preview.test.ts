@@ -1127,3 +1127,198 @@ for (const command of [false, true]) {
     );
   });
 }
+
+const categorySource = [
+  'State IDLE as "待機" color "#4F46E5":',
+  "    待つ",
+  'State RUNNING as "実行中" color "#22C55E":',
+  "    走る",
+  'State RECOVERED as "回復済み" color "#F97316":',
+  "    回復した",
+  'EventCategoryHeaders "系統" > "区分" > "種別"',
+  'Event START as "開始" in "操作" > "運転" > "開始系"',
+  "Transition IDLE on START -> RUNNING:",
+  "    記録する",
+].join("\n");
+const categoryModel = {
+  states: [
+    { id: "IDLE", name: "待機", color: "#4F46E5", meaning: "待つ" },
+    { id: "RUNNING", name: "実行中", color: "#22C55E", meaning: "走る" },
+    {
+      id: "RECOVERED",
+      name: "回復済み",
+      color: "#F97316",
+      meaning: "回復した",
+    },
+  ],
+  events: [
+    { id: "START", name: "開始", categoryPath: ["操作", "運転", "開始系"] },
+  ],
+  transitions: [
+    {
+      fromStateId: "IDLE",
+      eventId: "START",
+      action: "記録する",
+      targetStateId: "RUNNING",
+    },
+  ],
+  eventCategoryHeaders: ["系統", "区分", "種別"],
+};
+const categoryRepairSource = categorySource
+  .replace('"操作" > "運転" > "開始系"', '"業務" > "復旧"')
+  .replace('"系統" > "区分" > "種別"', '"領域" > "用途"')
+  .replace('"待機"', '"再開待ち"')
+  .replace("    記録する", "    再開を記録する")
+  .replace("-> RUNNING:", "-> RECOVERED:");
+const categoryRepairModel = {
+  ...categoryModel,
+  states: [
+    { ...categoryModel.states[0], name: "再開待ち" },
+    ...categoryModel.states.slice(1),
+  ],
+  events: [{ id: "START", name: "開始", categoryPath: ["業務", "復旧"] }],
+  eventCategoryHeaders: ["領域", "用途"],
+  transitions: [
+    {
+      ...categoryModel.transitions[0],
+      action: "再開を記録する",
+      targetStateId: "RECOVERED",
+    },
+  ],
+};
+test("REQ-021-S01 分類の追加と移動と除去と宣言順を通知する", async () => {
+  const document = host.doc();
+  document.text = categorySource;
+  const panel = await open(document);
+  for (const [suffix, expected] of [
+    [
+      ' in "通信" > "監視"',
+      {
+        ...categoryModel,
+        events: [{ id: "START", name: "開始", categoryPath: ["通信", "監視"] }],
+      },
+    ],
+    ["", { ...categoryModel, events: [{ id: "START", name: "開始" }] }],
+    [' in "操作" > "運転" > "開始系"', categoryModel],
+  ] as const) {
+    document.text = categorySource.replace(
+      ' in "操作" > "運転" > "開始系"',
+      suffix,
+    );
+    document.version++;
+    host.changed.emit({ document });
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: expected, hasErrors: false }),
+    );
+  }
+});
+test("REQ-021-S02 正常から分類エラーで保持して異なる現在の内容へ回復する", async () => {
+  const document = host.doc();
+  document.text = categorySource;
+  const panel = await open(document);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: categoryModel, hasErrors: false }),
+  );
+  document.text = categorySource.replace('"開始系"', '"開始系" > "超過"');
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: categoryModel, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "category-depth",
+      range: expect.objectContaining({ start: { line: 7, character: 0 } }),
+    }),
+  ]);
+  document.text = categoryRepairSource;
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: categoryRepairModel, hasErrors: false }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+test("REQ-021-S06 見出しだけの変更と不足からの回復を通知する", async () => {
+  const document = host.doc();
+  document.text = categorySource;
+  const panel = await open(document);
+  document.text = categorySource.replace(
+    '"系統" > "区分" > "種別"',
+    '"領域" > "用途" > "詳細"',
+  );
+  document.version++;
+  host.changed.emit({ document });
+  const renamed = {
+    ...categoryModel,
+    eventCategoryHeaders: ["領域", "用途", "詳細"],
+  };
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: renamed, hasErrors: false }),
+  );
+  document.text = categorySource.replace('"系統" > "区分" > "種別"', '"領域"');
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: renamed, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "category-headers-missing",
+      range: expect.objectContaining({ start: { line: 7, character: 0 } }),
+    }),
+  ]);
+  document.text = categorySource;
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: categoryModel, hasErrors: false }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+test("REQ-021-S05 他文書の分類編集を無視し初回エラーへの切り替えでは正常モデルを混ぜない", async () => {
+  const a = host.doc();
+  a.text = categorySource;
+  const panel = await open(a);
+  const calls = panel.webview.postMessage.mock.calls.length;
+  const b = host.doc("b.gls");
+  b.text = categorySource.replace('"開始系"', '"開始系" > "超過"');
+  host.changed.emit({ document: b });
+  expect(panel.webview.postMessage.mock.calls).toHaveLength(calls);
+  expect(host.diagnostics.has("file:///b.gls")).toBe(false);
+  await open(b);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///b.gls",
+      model: null,
+      hasErrors: true,
+    }),
+  );
+  expect(host.panels).toHaveLength(1);
+});
+for (const command of [false, true]) {
+  test(`REQ-021-S04 小さい版番号でも分類と見出しを更新する: command=${command}`, async () => {
+    const previous = host.doc();
+    previous.text = categorySource;
+    previous.version = 9;
+    const panel = await open(previous);
+    previous.isClosed = true;
+    host.closed.emit(previous);
+    const reopened = host.doc();
+    reopened.text = categoryRepairSource;
+    if (command) await open(reopened);
+    else {
+      reopened.version = 2;
+      host.changed.emit({ document: reopened });
+    }
+    expect(reopened.version).toBeLessThan(previous.version);
+    expect(host.panels).toHaveLength(1);
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sequence: 2,
+        model: categoryRepairModel,
+        hasErrors: false,
+      }),
+    );
+  });
+}

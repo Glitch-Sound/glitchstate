@@ -25,6 +25,15 @@ const state = z.strictObject({
 const event = z.strictObject({
   id: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
   name: z.string().refine((value) => value.trim().length > 0),
+  categoryPath: z
+    .array(
+      z
+        .string()
+        .refine((value) => value.trim().length > 0 && !/["\r\n]/.test(value)),
+    )
+    .min(1)
+    .max(3)
+    .optional(),
 });
 const transition = z.strictObject({
   fromStateId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
@@ -43,6 +52,15 @@ const model = z
     states: z.array(state),
     events: z.array(event),
     transitions: z.array(transition),
+    eventCategoryHeaders: z
+      .array(
+        z
+          .string()
+          .refine((value) => value.trim().length > 0 && !/["\r\n]/.test(value)),
+      )
+      .min(1)
+      .max(3)
+      .optional(),
   })
   .refine((value) => {
     const states = new Set(value.states.map((item) => item.id));
@@ -54,6 +72,11 @@ const model = z
       states.size === value.states.length &&
       events.size === value.events.length &&
       pairs.size === value.transitions.length &&
+      value.events.every(
+        (item) =>
+          (item.categoryPath?.length ?? 0) <=
+          (value.eventCategoryHeaders?.length ?? 0),
+      ) &&
       value.transitions.every(
         (item) =>
           states.has(item.fromStateId) &&

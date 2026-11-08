@@ -1,0 +1,20 @@
+State IDLE as "待機" color "#4F46E5":
+    開始を待つ状態
+
+State RUNNING as "実行中" color "#22C55E":
+    実行している状態
+
+EventCategoryHeaders "系統" > "区分" > "種別"
+
+Event START as "開始" in "操作" > "運転" > "開始系"
+Event STOP as "停止" in "操作" > "運転"
+Event PING as "疎通確認"
+
+Transition IDLE on START -> RUNNING:
+    開始を記録する
+
+Transition RUNNING on STOP -> IDLE:
+    -
+
+Transition IDLE on PING -> IDLE:
+    応答する

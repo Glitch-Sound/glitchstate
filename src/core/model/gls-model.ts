@@ -10,11 +10,13 @@ export interface GlsModel {
   readonly states: readonly StateDefinition[];
   readonly events: readonly EventDefinition[];
   readonly transitions: readonly TransitionDefinition[];
+  readonly eventCategoryHeaders?: readonly string[];
 }
 
 export interface EventDefinition {
   readonly id: string;
   readonly name: string;
+  readonly categoryPath?: readonly string[];
 }
 
 export interface TransitionDefinition {

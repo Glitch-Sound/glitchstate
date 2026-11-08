@@ -8,4 +8,5 @@ exports.run = async () => {
   await require("./state-preview.test.cjs").run();
   await require("./transition-preview.test.cjs").run();
   await require("./diagram-preview.test.cjs").run();
+  await require("./category-preview.test.cjs").run();
 };

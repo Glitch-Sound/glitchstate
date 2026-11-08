@@ -49,3 +49,9 @@
 .transition-undefined {
   color: var(--transition-undefined-color);
 }
+
+.event-category,
+.event-category-header {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
