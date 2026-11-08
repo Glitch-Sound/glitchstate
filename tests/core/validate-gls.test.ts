@@ -25,7 +25,7 @@ const cases: [string, string, number][] = [
     "indent",
     2,
   ]),
-  [`${header}\n    意味\nEvent START`, "unsupported", 3],
+  [`${header}\n    意味\nGroup STATES`, "unsupported", 3],
 ];
 
 test.each(cases)("REQ-002-S01 %s -> %s", (source, code, line) => {

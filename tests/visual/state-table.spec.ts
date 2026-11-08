@@ -5,6 +5,9 @@ const states = [
   { id: "A_FIRST", name: "実行中", meaning: "処理中", color: "#22c55e" },
 ];
 
+const stateTable = (page: Page) =>
+  page.getByRole("table", { name: "状態定義", exact: true });
+
 async function start(page: Page) {
   await page.addInitScript(() => {
     Object.assign(window, {
@@ -27,7 +30,7 @@ async function update(page: Page, nextStates = states, sequence = 1) {
     uri: "file:///a.gls",
     version: sequence,
     sequence,
-    model: { states: nextStates },
+    model: { states: nextStates, events: [], transitions: [] },
     hasErrors: false,
   });
 }
@@ -37,12 +40,12 @@ test("REQ-004-S01 色、状態、意味の列順と指定色だけの色セル",
 }) => {
   await start(page);
   await update(page);
-  await expect(page.getByRole("columnheader")).toHaveText([
+  await expect(stateTable(page).getByRole("columnheader")).toHaveText([
     "色",
     "状態",
     "意味",
   ]);
-  const rows = page.locator("tbody tr");
+  const rows = stateTable(page).locator("tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0).locator("td")).toHaveText([
     "",
@@ -61,10 +64,14 @@ test("REQ-004-S01 色、状態、意味の列順と指定色だけの色セル",
 test("REQ-004-S02 空のモデルで古い行を消す", async ({ page }) => {
   await start(page);
   await update(page);
-  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(2);
   await update(page, [], 2);
-  await expect(page.locator("tbody tr")).toHaveCount(0);
-  await expect(page.getByRole("status")).toHaveText("状態が定義されていない。");
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(0);
+  await expect(
+    page
+      .getByRole("region", { name: "状態定義", exact: true })
+      .getByRole("status"),
+  ).toHaveText("状態が定義されていない。");
 });
 
 test("REQ-004-S03 意味を改行付きテキストとして扱う", async ({ page }) => {
@@ -75,7 +82,7 @@ test("REQ-004-S03 意味を改行付きテキストとして扱う", async ({ pa
       meaning: "<script>window.glsExecuted = true</script>\n確認する",
     },
   ]);
-  const meaning = page.locator("tbody tr td").nth(2);
+  const meaning = stateTable(page).locator("tbody tr td").nth(2);
   await expect(meaning).toHaveText(
     "<script>window.glsExecuted = true</script>\n確認する",
   );
@@ -91,7 +98,7 @@ test("REQ-004-S03 意味を改行付きテキストとして扱う", async ({ pa
 test("REQ-005-S01 編集した色見本と各セルを更新する", async ({ page }) => {
   await start(page);
   await update(page);
-  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(2);
   await update(
     page,
     [
@@ -104,19 +111,24 @@ test("REQ-005-S01 編集した色見本と各セルを更新する", async ({ pa
     ],
     2,
   );
-  await expect(page.locator("tbody tr")).toHaveCount(1);
-  await expect(page.locator("tbody tr td")).toHaveText([
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(1);
+  await expect(stateTable(page).locator("tbody tr td")).toHaveText([
     "",
     "変更後",
     "変更した意味",
   ]);
-  await expect(page.locator("tbody rect")).toHaveAttribute("fill", "#FF8800");
+  await expect(stateTable(page).locator("tbody rect")).toHaveAttribute(
+    "fill",
+    "#FF8800",
+  );
 });
 
 test("REQ-005-S03 遅れた古い通知と不正な通知を描画しない", async ({ page }) => {
   await start(page);
   await update(page, [{ ...states[0], name: "最新" }], 2);
-  await expect(page.locator("tbody tr td").nth(1)).toHaveText("最新");
+  await expect(stateTable(page).locator("tbody tr td").nth(1)).toHaveText(
+    "最新",
+  );
   await update(page, [{ ...states[0], name: "古い" }], 1);
   await page.evaluate(
     () =>
@@ -124,14 +136,18 @@ test("REQ-005-S03 遅れた古い通知と不正な通知を描画しない", as
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
   );
-  await expect(page.locator("tbody tr td").nth(1)).toHaveText("最新");
+  await expect(stateTable(page).locator("tbody tr td").nth(1)).toHaveText(
+    "最新",
+  );
   await page.evaluate(() =>
     window.postMessage(
       { type: "glitchstate.update", model: { states: [{}] } },
       "*",
     ),
   );
-  await expect(page.locator("tbody tr td").nth(1)).toHaveText("最新");
+  await expect(stateTable(page).locator("tbody tr td").nth(1)).toHaveText(
+    "最新",
+  );
 });
 
 test("REQ-006-S01 正常な表とエラー案内を同時に表示する", async ({ page }) => {
@@ -142,24 +158,22 @@ test("REQ-006-S01 正常な表とエラー案内を同時に表示する", async
     uri: "file:///a.gls",
     version: 2,
     sequence: 2,
-    model: { states },
+    model: { states, events: [], transitions: [] },
     hasErrors: true,
   });
   await expect(page.getByRole("alert")).toHaveText(
     "解析エラーがある。Problemsを確認すること。",
   );
-  await expect(page.locator("tbody tr")).toHaveCount(2);
-  await expect(page.locator("tbody tr").nth(0).locator("td")).toHaveText([
-    "",
-    "待機",
-    "開始を待つ状態",
-  ]);
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(2);
+  await expect(
+    stateTable(page).locator("tbody tr").nth(0).locator("td"),
+  ).toHaveText(["", "待機", "開始を待つ状態"]);
 });
 
 test("REQ-006-S02 別文書の初回エラーでは表を表示しない", async ({ page }) => {
   await start(page);
   await update(page);
-  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(2);
   await page.evaluate(() =>
     window.postMessage(
       {
@@ -173,7 +187,7 @@ test("REQ-006-S02 別文書の初回エラーでは表を表示しない", async
       "*",
     ),
   );
-  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(stateTable(page).locator("tbody tr")).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveText(
     "解析エラーのため表示できない。",
   );
@@ -199,8 +213,11 @@ test("REQ-006-S03 修正した色見本を表示してエラー案内を消す",
   await expect(page.getByRole("alert")).toHaveCount(1);
   await update(page, [{ ...states[0], color: "#0088FF" }], 2);
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await expect(page.locator("tbody rect")).toHaveAttribute("fill", "#0088FF");
-  await expect(page.locator("tbody td").nth(0)).toHaveText("");
+  await expect(stateTable(page).locator("tbody rect")).toHaveAttribute(
+    "fill",
+    "#0088FF",
+  );
+  await expect(stateTable(page).locator("tbody td").nth(0)).toHaveText("");
 });
 
 for (const { id, version, name } of [
@@ -216,19 +233,25 @@ for (const { id, version, name } of [
       uri: "file:///a.gls",
       version: 9,
       sequence: 1,
-      model: { states: [{ ...states[0], name: "閉じる前" }] },
+      model: {
+        states: [{ ...states[0], name: "閉じる前" }],
+        events: [],
+        transitions: [],
+      },
       hasErrors: false,
     });
-    await expect(page.locator("tbody tr td").nth(1)).toHaveText("閉じる前");
+    await expect(stateTable(page).locator("tbody tr td").nth(1)).toHaveText(
+      "閉じる前",
+    );
     await page.evaluate((data) => window.postMessage(data, "*"), {
       type: "glitchstate.update",
       uri: "file:///a.gls",
       version,
       sequence: 2,
-      model: { states: [{ ...states[0], name }] },
+      model: { states: [{ ...states[0], name }], events: [], transitions: [] },
       hasErrors: false,
     });
-    await expect(page.locator("tbody tr td")).toHaveText([
+    await expect(stateTable(page).locator("tbody tr td")).toHaveText([
       "",
       name,
       "開始を待つ状態",
@@ -248,7 +271,11 @@ for (const { id, version, name } of [
       uri: "file:///a.gls",
       version: 9,
       sequence: 1,
-      model: { states: [{ ...states[0], name: "遅れた閉じる前の通知" }] },
+      model: {
+        states: [{ ...states[0], name: "遅れた閉じる前の通知" }],
+        events: [],
+        transitions: [],
+      },
       hasErrors: false,
     });
     await page.evaluate(
@@ -257,7 +284,7 @@ for (const { id, version, name } of [
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         ),
     );
-    await expect(page.locator("tbody tr td")).toHaveText([
+    await expect(stateTable(page).locator("tbody tr td")).toHaveText([
       "",
       name,
       "開始を待つ状態",

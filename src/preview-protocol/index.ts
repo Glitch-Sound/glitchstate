@@ -22,10 +22,50 @@ const state = z.strictObject({
   meaning: z.string().refine((value) => value.trim().length > 0),
   color: z.string().regex(/^#[a-fA-F0-9]{6}$/),
 });
+const event = z.strictObject({
+  id: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  name: z.string().refine((value) => value.trim().length > 0),
+});
+const transition = z.strictObject({
+  fromStateId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  eventId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  action: z
+    .string()
+    .refine((value) => value.trim().length > 0)
+    .nullable(),
+  targetStateId: z
+    .string()
+    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+    .nullable(),
+});
+const model = z
+  .strictObject({
+    states: z.array(state),
+    events: z.array(event),
+    transitions: z.array(transition),
+  })
+  .refine((value) => {
+    const states = new Set(value.states.map((item) => item.id));
+    const events = new Set(value.events.map((item) => item.id));
+    const pairs = new Set(
+      value.transitions.map((item) => `${item.fromStateId}:${item.eventId}`),
+    );
+    return (
+      states.size === value.states.length &&
+      events.size === value.events.length &&
+      pairs.size === value.transitions.length &&
+      value.transitions.every(
+        (item) =>
+          states.has(item.fromStateId) &&
+          events.has(item.eventId) &&
+          (item.targetStateId === null || states.has(item.targetStateId)),
+      )
+    );
+  });
 const update = z.strictObject({
   type: z.literal("glitchstate.update"),
   ...identity,
-  model: z.strictObject({ states: z.array(state) }).nullable(),
+  model: model.nullable(),
   hasErrors: z.boolean(),
 });
 const incoming = z.discriminatedUnion("type", [
@@ -36,7 +76,7 @@ export type WebviewMessage = z.infer<typeof incoming>;
 
 /** 受信値が描画できる共通モデルの通知であるか確かめる。
  * @param value メッセージAPIから受け取った未検証の値。
- * @returns 通知の形式と各状態の値が有効ならtrue。
+ * @returns 通知の形式、定義の値と参照が有効ならtrue。
  */
 export function isPreviewUpdate(value: unknown): value is PreviewUpdate {
   return update.safeParse(value).success;

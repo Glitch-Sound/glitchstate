@@ -1,10 +1,13 @@
-.state-table {
+.state-table,
+.transition-table {
   border-collapse: collapse;
   width: 100%;
 }
 
 .state-table th,
-.state-table td {
+.state-table td,
+.transition-table th,
+.transition-table td {
   padding: 0.5em;
   text-align: left;
   vertical-align: top;
@@ -20,4 +23,29 @@
 .state-meaning {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.transition-section {
+  --transition-line-gap: 0.5em;
+  --transition-section-gap: 1.5em;
+  --transition-undefined-color: var(--vscode-errorForeground, #d32f2f);
+  margin-top: var(--transition-section-gap);
+}
+
+.transition-scroll {
+  overflow-x: auto;
+}
+
+.transition-action,
+.transition-target {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.transition-target {
+  margin-top: var(--transition-line-gap);
+}
+
+.transition-undefined {
+  color: var(--transition-undefined-color);
 }
