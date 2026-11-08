@@ -21,6 +21,17 @@
         "command": "glitchstate.openPreview",
         "title": "GlitchState: プレビューを開く"
       }
+    ],
+    "languages": [
+      {
+        "id": "glitchstate",
+        "aliases": [
+          "GlitchState"
+        ],
+        "extensions": [
+          ".gls"
+        ]
+      }
     ]
   },
   "scripts": {
@@ -28,7 +39,7 @@
     "build": "corepack pnpm build:extension && corepack pnpm build:webview",
     "build:extension": "node scripts/build-extension.mjs",
     "build:webview": "vite build",
-    "check:product": "corepack pnpm lint && corepack pnpm check:fsd && corepack pnpm typecheck && corepack pnpm check:docs && corepack pnpm test && corepack pnpm build",
+    "check:product": "corepack pnpm lint && corepack pnpm check:fsd && corepack pnpm typecheck && corepack pnpm check:docs && corepack pnpm test && corepack pnpm build && corepack pnpm test:visual && corepack pnpm test:extension",
     "check": "corepack pnpm check:product && npx --no-install openspec validate --specs --strict && node scripts/openspec-trace.mjs check && node scripts/openspec-trace.mjs generate",
     "lint": "biome check src scripts/build-extension.mjs scripts/check-doc-comments.mjs tests vite.config.ts vitest.config.ts steiger.config.ts playwright.config.ts package.json tsconfig.json biome.json",
     "check:fsd": "steiger ./src/webview",

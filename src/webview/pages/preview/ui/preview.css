@@ -1,0 +1,23 @@
+.state-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.state-table th,
+.state-table td {
+  padding: 0.5em;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.state-swatch {
+  --swatch-size: 1em;
+  width: var(--swatch-size);
+  height: var(--swatch-size);
+}
+
+.state-meaning {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -13,12 +13,15 @@
 │   │   ├── parser/         # DSL構文解析
 │   │   └── validator/      # 定義と参照の検証
 │   │
+│   ├── preview-protocol/   # ExtensionとWebviewの通信契約
+│   │
 │   ├── extension/          # VS Code拡張本体
 │   │
 │   └── webview/            # プレビュー画面
 │       ├── app/            # Webviewの起動、初期化
 │       ├── pages/
 │       │   └── preview/    # 統合プレビュー画面
+│       │       └── ui/     # 状態定義表の画面部品
 │       └── shared/         # 実際に複数箇所で使う部品
 │
 ├── syntaxes/               # .gls構文ハイライト
@@ -27,7 +30,7 @@
 │   ├── core/               # 解析・検証の単体テスト
 │   ├── webview/            # UIのコンポーネントテスト
 │   ├── visual/             # 見た目・描画のテスト
-│   └── extension/          # VS Code拡張統合テスト
+│   └── extension/          # VS Code連携の単体テストと統合テスト
 │
 ├── .agents/skills/         # Codex 向けのスキル(OpenSpec が生成する)
 ├── .claude/skills/         # Claude Code 向けのスキル(OpenSpec が生成する)

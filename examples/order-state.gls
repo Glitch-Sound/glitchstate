@@ -1,0 +1,9 @@
+State IDLE as "待機" color "#4F46E5":
+    開始を待つ状態
+    開始要求を受けたら処理へ進む
+
+State RUNNING as "実行中" color "#22C55E":
+    処理を実行している状態
+
+State COMPLETE as "完了" color "#F59E0B":
+    処理が完了した状態

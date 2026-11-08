@@ -5,4 +5,5 @@ exports.run = async () => {
   await vscode.commands.executeCommand("glitchstate.openPreview");
   const commands = await vscode.commands.getCommands(true);
   assert.ok(commands.includes("glitchstate.openPreview"));
+  await require("./state-preview.test.cjs").run();
 };
