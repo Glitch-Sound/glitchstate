@@ -525,3 +525,73 @@ test("REQ-005-S03 解析途中で新しい版が到着した場合に古い診�
     }),
   );
 });
+
+test("REQ-005-S05 小さい版番号で再オープンした後も自動更新する", async () => {
+  const previous = host.doc("a.gls", "閉じる前");
+  previous.version = 9;
+  const panel = await open(previous);
+  const oldSequence = panel.webview.postMessage.mock.lastCall?.[0] as {
+    sequence: number;
+  };
+  previous.isClosed = true;
+  host.closed.emit(previous);
+  const reopened = host.doc("a.gls", "再オープンした状態");
+  host.api.window.activeTextEditor = { document: reopened };
+  reopened.text = reopened.text.replace(
+    "再オープンした状態",
+    "再オープン後の編集",
+  );
+  reopened.version = 2;
+  host.changed.emit({ document: reopened });
+  expect(reopened.version).toBeLessThan(previous.version);
+  expect(host.panels).toHaveLength(1);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///a.gls",
+      version: 2,
+      sequence: oldSequence.sequence + 1,
+      model: {
+        states: [
+          {
+            id: "IDLE",
+            name: "再オープン後の編集",
+            meaning: "開始を待つ状態",
+            color: "#4F46E5",
+          },
+        ],
+      },
+    }),
+  );
+});
+
+test("REQ-003-S04 小さい版番号で再オープンした文書をコマンドで表示する", async () => {
+  const previous = host.doc("a.gls", "閉じる前");
+  previous.version = 9;
+  const panel = await open(previous);
+  const oldSequence = panel.webview.postMessage.mock.lastCall?.[0] as {
+    sequence: number;
+  };
+  previous.isClosed = true;
+  host.closed.emit(previous);
+  const reopened = host.doc("a.gls", "再オープンした状態");
+  await open(reopened);
+  expect(reopened.version).toBeLessThan(previous.version);
+  expect(host.panels).toHaveLength(1);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///a.gls",
+      version: 1,
+      sequence: oldSequence.sequence + 1,
+      model: {
+        states: [
+          {
+            id: "IDLE",
+            name: "再オープンした状態",
+            meaning: "開始を待つ状態",
+            color: "#4F46E5",
+          },
+        ],
+      },
+    }),
+  );
+});

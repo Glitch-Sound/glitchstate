@@ -66,6 +66,56 @@ exports.run = async () => {
     await fs.writeFile(file, text);
     return vscode.workspace.openTextDocument(vscode.Uri.file(file));
   };
+  const closeTarget = async (doc) => {
+    const tabs = vscode.window.tabGroups.all
+      .flatMap((group) => group.tabs)
+      .filter(
+        (tab) =>
+          tab.input instanceof vscode.TabInputText &&
+          tab.input.uri.toString() === doc.uri.toString(),
+      );
+    assert.ok(tabs.length > 0);
+    let subscription;
+    let timer;
+    const closed = new Promise((resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("対象文書が閉じられていない")),
+        10000,
+      );
+      subscription = vscode.workspace.onDidCloseTextDocument((item) => {
+        if (item.uri.toString() === doc.uri.toString()) resolve();
+      });
+    });
+    try {
+      assert.equal(await vscode.window.tabGroups.close(tabs), true);
+      await closed;
+      assert.equal(doc.isClosed, true);
+    } finally {
+      clearTimeout(timer);
+      subscription.dispose();
+    }
+  };
+  const prepareReopen = async (file) => {
+    const uri = vscode.Uri.file(path.join(directory, file));
+    await fs.writeFile(uri.fsPath, source("閉じる前"));
+    // 文書取得APIの参照キャッシュを避け、タブを閉じて実際に文書を破棄できるようにする。
+    await vscode.commands.executeCommand("vscode.open", uri, {
+      viewColumn: vscode.ViewColumn.One,
+      preview: false,
+    });
+    const doc = vscode.window.activeTextEditor?.document;
+    assert.equal(doc?.uri.toString(), uri.toString());
+    await replace(doc, source("閉じる前1"));
+    await replace(doc, source("閉じる前2"));
+    await replace(doc, source("閉じる前"));
+    await doc.save();
+    const data = await rendered(api, open, uriIs(doc));
+    assert.equal(data.model.states[0].name, "閉じる前");
+    const version = doc.version;
+    await closeTarget(doc);
+    assert.equal(api.currentPreviewUri(), doc.uri.toString());
+    return { uri: doc.uri, version };
+  };
   const errors = [];
   const cases = [
     /** REQ-003-S01 */
@@ -205,6 +255,54 @@ exports.run = async () => {
       assert.equal(data.hasErrors, false);
       assert.equal(data.model.states[0].color, "#0088FF");
       assert.equal(doc.isDirty, true);
+    },
+    /** REQ-005-S05 */
+    async function updateAfterReopen() {
+      const previous = await prepareReopen("reopen-update.gls");
+      // 同じ内容ではVS Codeが編集履歴と版番号を復元するため、閉じた間に内容を更新する。
+      await fs.writeFile(previous.uri.fsPath, source("再オープンした状態"));
+      const reopened = await vscode.workspace.openTextDocument(previous.uri);
+      assert.ok(
+        reopened.version + 1 < previous.version,
+        "再オープン後の編集でも版番号が閉じる前より小さいこと",
+      );
+      await vscode.window.showTextDocument(reopened, vscode.ViewColumn.One);
+      const data = await rendered(
+        api,
+        () => replace(reopened, source("再オープン後の編集")),
+        uriIs(reopened, reopened.version + 1),
+      );
+      assert.equal(data.model.states[0].name, "再オープン後の編集");
+      assert.equal(data.uri, previous.uri.toString());
+      assert.ok(data.version < previous.version);
+      assert.equal(reopened.isDirty, true);
+      assert.equal(
+        vscode.window.tabGroups.all
+          .flatMap((group) => group.tabs)
+          .filter((tab) => tab.input instanceof vscode.TabInputWebview).length,
+        1,
+      );
+    },
+    /** REQ-003-S04 */
+    async function commandAfterReopen() {
+      const previous = await prepareReopen("reopen-command.gls");
+      await fs.writeFile(previous.uri.fsPath, source("再オープンした状態"));
+      const reopened = await vscode.workspace.openTextDocument(previous.uri);
+      assert.ok(
+        reopened.version < previous.version,
+        "再オープンで版番号が小さくなること",
+      );
+      await vscode.window.showTextDocument(reopened, vscode.ViewColumn.One);
+      const data = await rendered(api, open, uriIs(reopened));
+      assert.equal(data.model.states[0].name, "再オープンした状態");
+      assert.equal(data.uri, previous.uri.toString());
+      assert.ok(data.version < previous.version);
+      assert.equal(
+        vscode.window.tabGroups.all
+          .flatMap((group) => group.tabs)
+          .filter((tab) => tab.input instanceof vscode.TabInputWebview).length,
+        1,
+      );
     },
     /** REQ-003-S03 */
     async function unrelatedDocument() {

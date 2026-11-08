@@ -33,12 +33,8 @@ let latest: PreviewUpdate | undefined;
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   const message = event.data;
   if (!isPreviewUpdate(message)) return;
-  if (
-    latest &&
-    (message.sequence < latest.sequence ||
-      (message.uri === latest.uri && message.version < latest.version))
-  )
-    return;
+  // 同じURIでも文書の再オープンで版番号が戻るため、通知の通し番号を使う。
+  if (latest && message.sequence < latest.sequence) return;
   latest = message;
   root.render(
     <React.StrictMode>

@@ -93,11 +93,11 @@ export function createPreviewPanel(context: vscode.ExtensionContext) {
       created.webview.html = webviewHtml(created.webview, context.extensionUri);
     },
     update(data: PreviewUpdate) {
+      // 文書を開き直すと版番号が戻るため、再オープンをまたぐ通知順で比較する。
       if (
         !current ||
         current.uri !== data.uri ||
-        data.sequence <= current.sequence ||
-        data.version < current.version
+        data.sequence <= current.sequence
       )
         return;
       current = data;

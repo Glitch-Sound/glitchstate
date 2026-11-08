@@ -202,3 +202,65 @@ test("REQ-006-S03 修正した色見本を表示してエラー案内を消す",
   await expect(page.locator("tbody rect")).toHaveAttribute("fill", "#0088FF");
   await expect(page.locator("tbody td").nth(0)).toHaveText("");
 });
+
+for (const { id, version, name } of [
+  { id: "REQ-005-S05", version: 2, name: "再オープン後の編集" },
+  { id: "REQ-003-S04", version: 1, name: "再オープンした状態" },
+]) {
+  test(`${id} 閉じる前より小さい版番号の新しい通知を描画する`, async ({
+    page,
+  }) => {
+    await start(page);
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      type: "glitchstate.update",
+      uri: "file:///a.gls",
+      version: 9,
+      sequence: 1,
+      model: { states: [{ ...states[0], name: "閉じる前" }] },
+      hasErrors: false,
+    });
+    await expect(page.locator("tbody tr td").nth(1)).toHaveText("閉じる前");
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      type: "glitchstate.update",
+      uri: "file:///a.gls",
+      version,
+      sequence: 2,
+      model: { states: [{ ...states[0], name }] },
+      hasErrors: false,
+    });
+    await expect(page.locator("tbody tr td")).toHaveText([
+      "",
+      name,
+      "開始を待つ状態",
+    ]);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { glsMessages: unknown[] }).glsMessages,
+      ),
+    ).toContainEqual({
+      type: "glitchstate.rendered",
+      uri: "file:///a.gls",
+      version,
+      sequence: 2,
+    });
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      type: "glitchstate.update",
+      uri: "file:///a.gls",
+      version: 9,
+      sequence: 1,
+      model: { states: [{ ...states[0], name: "遅れた閉じる前の通知" }] },
+      hasErrors: false,
+    });
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.locator("tbody tr td")).toHaveText([
+      "",
+      name,
+      "開始を待つ状態",
+    ]);
+  });
+}
