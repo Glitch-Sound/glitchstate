@@ -36,7 +36,8 @@
 
 - 既存の`.gls`と状態定義、イベント、遷移の共通モデルをそのまま利用する。
 - Webviewのプレビュー構成と図の描画、Webviewビルドのスタイル、描画完了の扱いを変更する。
-- 単体テスト、ブラウザテスト、VS Code統合テストへ図の検証を追加する。
+- 単体テスト、ブラウザテスト、VS Code統合テストへ図の検証を追加する。\
+  `vitest.config.ts`でWebviewの`.test.ts`も収集し、既存のCore、ExtensionとWebviewの`.test.tsx`の収集を保つ。
 - `README.md`と`openspec/specs/README.md`を更新し、図の関連ファイルの置き場所を`openspec/structure.md`へ反映する。
 - 新しい依存は追加せず、既存のReact Flowを利用する。
 

@@ -10,6 +10,7 @@
 - 現状: `@xyflow/react`は既存依存にあり、導入済みの型定義でノード計測、初期表示範囲、操作の制御を確認した。\
   図の描画部品と変換処理はまだない。
 - 現状: 親の`useLayoutEffect`による描画完了通知だけでは、React Flowのノード計測や矢印の確定を確認できない。
+- 現状: `vitest.config.ts`はWebviewの`tests/webview/**/*.test.tsx`だけを収集し、計画中の`tests/webview/state-diagram.test.ts`は収集しない。
 
 ## 設計判断
 
@@ -104,6 +105,9 @@ flowchart LR
 ### D-07 - 意味の変換と実描画を分けて検証する
 
 - 選択: 変換の単体テストは手で用意したノードID、名前、カラー、矢印の始点と終点の期待値を使う。\
+  `vitest.config.ts`の収集対象へ`tests/webview/**/*.test.ts`を追加し、既存のCore、ExtensionとWebviewの`.test.tsx`の収集を保つ。\
+  テストを先に作り、収集設定の更新後に実際のテストケースが実行され、未実装の変換で失敗することを確認する。\
+  `package.json`の既存の`test`、`check:product`、`check`から追加した単体テストも実行し、検査コマンドは増やさない。\
   ブラウザテストでは実際のReact Flowを使い、図領域内のノード、SVGの経路、矢尻、自己ループの外側への張り出し、相互遷移の経路の違い、3領域の順序を確かめる。\
   DOMに矢印のIDがあるだけでは成功とせず、長さが0より大きい経路と終点のマーカーを確認する。\
   色はcomputed styleで定義元の値と照合し、線と矢尻が同じ配色であることを確認する。\
@@ -143,6 +147,10 @@ flowchart LR
 自動テストでは色の適用と実際の描画経路を検証し、明暗テーマでの主観的な視認性の判定を代用しない。\
 DSLとCoreのモデルは変更しないため、新たな構文や参照エラーのシナリオは追加せず、既存の解析テストで互換性を確認する。\
 新たな性能要件や対応環境は追加しないため、非機能要件の測定は該当しない。
+
+apply中のタスク5.5では、OpenSpecの厳密検証と`node scripts/openspec-trace.mjs check`による通常の台帳検査を実行する。\
+変更別のstrict台帳検査は未完了タスクもエラーにするため、実装タスクの完了条件には含めない。\
+全タスクの完了を記録した後のverifyと、archiveの正式仕様への同期前に、`node scripts/openspec-trace.mjs check --strict --change add-basic-state-transition-diagram`を実行する。
 
 ## リスクと移行
 

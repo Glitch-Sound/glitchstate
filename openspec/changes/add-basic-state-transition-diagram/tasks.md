@@ -1,11 +1,15 @@
 # タスク
 
+全タスクの完了を記録した後のverifyと、archiveの正式仕様への同期前に、`node scripts/openspec-trace.mjs check --strict --change add-basic-state-transition-diagram`を実行する。\
+このstrict検査は全タスク完了を要求するため、実装タスク自身の完了条件には含めない。
+
 ## 1. 図のノードと矢印への変換(対象: REQ-014-S01、REQ-014-S02、REQ-014-S03、REQ-015-S01、REQ-015-S02、REQ-015-S03、REQ-015-S04、REQ-015-S05)
 
-- [ ] 1.1 `tests/webview/state-diagram.test.ts`へ、手書きの期待値によるノードのID、名前、カラー、孤立状態と、方向付きペア、重複統合、処理なし、遷移なし、自己遷移、逆方向の単体テストを追加する(確認: 未実装の変換に対して対象シナリオIDを持つテストが失敗する)。
-- [ ] 1.2 `src/webview/pages/preview/model/build-state-diagram.ts`へ共通モデルからの変換を実装する(確認: 1.1が成功し、入力モデルのイベント別の遷移を変更しない)。
-- [ ] 1.3 D-04の配置と調整値を`src/webview/pages/preview/model/`へ実装する前に、定義順、折り返し、計測後の高さを使う配置のテストを追加する(確認: 配置が未実装のため失敗し、調整値は定義元を参照する)。
-- [ ] 1.4 `diagram-config.ts`と配置処理を実装する(確認: 1.3が成功し、同じ入力で位置が安定する)。
+- [ ] 1.1 `tests/webview/state-diagram.test.ts`へ、手書きの期待値によるノードのID、名前、カラー、孤立状態と、方向付きペア、重複統合、処理なし、遷移なし、自己遷移、逆方向の単体テストを追加する(確認: 対象シナリオIDを持つテストが存在し、更新前のVitest設定ではこのファイルが収集されないことを確認する)。
+- [ ] 1.2 `vitest.config.ts`へ`tests/webview/**/*.test.ts`の収集を追加する(確認: 既存のCore、ExtensionとWebviewの`.test.tsx`の収集を保ち、1.1のテストが通常の`corepack pnpm test`で収集され、未実装の変換に対して失敗し、テストが見つからないだけの終了ではない)。
+- [ ] 1.3 `src/webview/pages/preview/model/build-state-diagram.ts`へ共通モデルからの変換を実装する(確認: 1.2で失敗した1.1のテストが成功し、入力モデルのイベント別の遷移を変更しない)。
+- [ ] 1.4 D-04の配置と調整値を`src/webview/pages/preview/model/`へ実装する前に、定義順、折り返し、計測後の高さを使う配置のテストを追加する(確認: 配置が未実装のため失敗し、調整値は定義元を参照する)。
+- [ ] 1.5 `diagram-config.ts`と配置処理を実装する(確認: 1.4が成功し、同じ入力で位置が安定する)。
 
 ## 2. 図の実描画と配色(対象: REQ-014-S01、REQ-014-S02、REQ-014-S03、REQ-014-S04、REQ-014-S05、REQ-015-S01、REQ-015-S02、REQ-015-S03、REQ-015-S04、REQ-015-S05、REQ-016-S01)
 
@@ -33,8 +37,8 @@
 - [ ] 5.2 `README.md`へ3表示の使い方と今回の範囲を、`openspec/specs/README.md`へ`state-transition-diagram`の役割と関係を追加する(確認: アーカイブ後の状態として記載し、進行中の変更名や未実装の操作機能を案内しない)。
 - [ ] 5.3 D-04の昇格先である`openspec/structure.md`のディレクトリ構成へプレビュー内のmodelと図のuiの配置を反映する(確認: 実際の配置と一致し、React Flowの型がCoreへ入っていない)。
 - [ ] 5.4 D-07の誤実装を一時コピーへ適用し、遷移なし、処理なし、重複統合、逆方向、自己ループ、淡い配色、図だけ古いモデル、修正後も以前の正常モデル、古い準備完了を受け付ける各誤りに対してテストが失敗することを確認する(確認: 各失敗と元の実装での成功を記録し、元のソースと検査設定を保持する)。
-- [ ] 5.5 仕様と設計の検証計画、タスク、テスト、実機確認の対応を確認する(確認: `npx --no-install openspec validate add-basic-state-transition-diagram --strict`と`node scripts/openspec-trace.mjs check --strict --change add-basic-state-transition-diagram`が成功する)。
+- [ ] 5.5 仕様と設計の検証計画、タスク、テスト、実機確認の対応を確認する(確認: `npx --no-install openspec validate add-basic-state-transition-diagram --strict`と、通常のトレーサビリティ検査である`node scripts/openspec-trace.mjs check`が成功する)。
 
 ## 6. 全体検証
 
-- [ ] 6.1 `npm run check`を実行する(確認: 既存の解析と2表、追加した図の単体、ブラウザ、実VS Code統合テスト、静的解析、正式仕様の厳密検証と台帳検査がすべて成功する)。
+- [ ] 6.1 `npm run check`を実行する(確認: 既存の解析と2表、Webviewの`.test.ts`を含む追加した図の単体、ブラウザ、実VS Code統合テスト、静的解析、正式仕様の厳密検証と台帳検査がすべて成功する)。
