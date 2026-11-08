@@ -842,6 +842,65 @@ test("REQ-013-S06 参照修正後に現在の状態と処理を送信して診�
   expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
 });
 
+test("REQ-013-S06 正常モデルを保持した参照エラーから新しい状態と処理と遷移先へ回復する", async () => {
+  const document = host.doc();
+  document.text = flowSource.replace("-> -:", "-> A_FIRST:");
+  const panel = await open(document);
+  const before = {
+    ...flowModel,
+    transitions: [{ ...flowTransition, targetStateId: "A_FIRST" }],
+  };
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ version: 1, model: before, hasErrors: false }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+
+  document.text = flowSource
+    .replace("待機", "編集途中")
+    .replace("記録する", "途中の処理")
+    .replace("-> -:", "-> MISSING:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ version: 2, model: before, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "reference",
+      message: "遷移先状態ID MISSING は未宣言",
+      range: expect.objectContaining({ start: { line: 6, character: 0 } }),
+    }),
+  ]);
+
+  document.text = flowSource
+    .replace("待機", "修正後の状態")
+    .replace("記録する", "修正後の処理")
+    .replace("-> -:", "-> Z_LAST:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      version: 3,
+      model: {
+        ...flowModel,
+        states: [
+          { ...initialStates[0], name: "修正後の状態" },
+          initialStates[1],
+        ],
+        transitions: [
+          {
+            ...flowTransition,
+            action: "修正後の処理",
+            targetStateId: "Z_LAST",
+          },
+        ],
+      },
+      hasErrors: false,
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+
 for (const command of [false, true]) {
   test(`REQ-013-S05 再オープン後の両表モデルを更新する: command=${command}`, async () => {
     const previous = host.doc();

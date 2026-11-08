@@ -212,6 +212,43 @@ exports.run = async () => {
       assert.equal(vscode.languages.getDiagnostics(doc.uri).length, 0);
       assert.equal(doc.isDirty, true);
     },
+    /** REQ-013-S06 */
+    async function transitionRepairAfterRetainedModel() {
+      const doc = await document("repair-retained-transitions.gls");
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
+      const initial = await rendered(api, open, uriIs(doc));
+      assert.deepEqual(initial.model, expected());
+      assert.equal(initial.hasErrors, false);
+      assert.deepEqual(vscode.languages.getDiagnostics(doc.uri), []);
+
+      const invalid = await rendered(
+        api,
+        () => replace(doc, source("編集途中", "途中の処理", "MISSING")),
+        uriIs(doc, doc.version + 1),
+      );
+      assert.deepEqual(invalid.model, expected());
+      assert.equal(invalid.hasErrors, true);
+      const diagnostics = vscode.languages.getDiagnostics(doc.uri);
+      assert.equal(diagnostics.length, 1);
+      assert.equal(diagnostics[0].code, "reference");
+      assert.equal(diagnostics[0].range.start.line, 5);
+      assert.equal(diagnostics[0].message, "遷移先状態ID MISSING は未宣言");
+
+      const repaired = await rendered(
+        api,
+        () => replace(doc, source("修正後の状態", "修正後の処理", "IDLE")),
+        uriIs(doc, doc.version + 1),
+      );
+      assert.deepEqual(
+        repaired.model,
+        expected("修正後の状態", "修正後の処理", "IDLE"),
+      );
+      assert.equal(repaired.hasErrors, false);
+      assert.deepEqual(vscode.languages.getDiagnostics(doc.uri), []);
+      assert.equal(doc.isDirty, true);
+      assert.equal(await fs.readFile(doc.uri.fsPath, "utf8"), source());
+      assertSinglePanel();
+    },
     /** REQ-013-S05 */
     async function transitionUpdateAfterReopen() {
       const previous = await prepareReopen("reopen-transition-edit.gls");

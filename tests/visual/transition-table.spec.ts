@@ -475,11 +475,42 @@ test("REQ-013-S04 古い通知と不正な参照で両方の表を上書きし�
 
 test("REQ-013-S06 修正後に両方の表を回復する", async ({ page }) => {
   await start(page);
-  await update(page, model, 1, true);
-  await expect(page.getByRole("alert")).toHaveCount(1);
-  await update(page, latestModel, 2);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await update(page, model, 1);
   await expect(stateTable(page).locator("tbody td:nth-child(2)")).toHaveText([
+    "待機",
+    "実行中",
+  ]);
+  await expect(table(page).getByRole("columnheader")).toHaveText([
+    "イベント",
+    "待機",
+    "実行中",
+  ]);
+  await expect(cell(page).locator(":scope > *")).toHaveText([
+    "開始を記録する",
+    "実行中",
+  ]);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await update(page, model, 2, true);
+  await expect(page.getByRole("alert")).toHaveCount(1);
+  await expect(stateTable(page).locator("tbody td:nth-child(2)")).toHaveText([
+    "待機",
+    "実行中",
+  ]);
+  await expect(cell(page).locator(":scope > *")).toHaveText([
+    "開始を記録する",
+    "実行中",
+  ]);
+
+  await update(page, latestModel, 3);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(stateTable(page).locator("tbody td:nth-child(2)")).toHaveText([
+    "最新",
+    "実行中",
+  ]);
+  await expect(table(page).getByRole("columnheader")).toHaveText([
+    "イベント",
     "最新",
     "実行中",
   ]);
