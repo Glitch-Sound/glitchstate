@@ -30,7 +30,7 @@
     "build:webview": "vite build",
     "check:product": "corepack pnpm lint && corepack pnpm check:fsd && corepack pnpm typecheck && corepack pnpm check:docs && corepack pnpm test && corepack pnpm build",
     "check": "corepack pnpm check:product && npx --no-install openspec validate --specs --strict && node scripts/openspec-trace.mjs check && node scripts/openspec-trace.mjs generate",
-    "lint": "biome check src scripts/build-extension.mjs scripts/check-doc-comments.mjs tests/extension vite.config.ts vitest.config.ts steiger.config.ts playwright.config.ts package.json tsconfig.json biome.json",
+    "lint": "biome check src scripts/build-extension.mjs scripts/check-doc-comments.mjs tests vite.config.ts vitest.config.ts steiger.config.ts playwright.config.ts package.json tsconfig.json biome.json",
     "check:fsd": "steiger ./src/webview",
     "check:docs": "node scripts/check-doc-comments.mjs",
     "typecheck": "tsc --noEmit",

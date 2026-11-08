@@ -11,8 +11,7 @@ function sourceFiles(directory) {
 }
 
 let errors = 0;
-function checkCallable(path, source, declaration, label) {
-  const documentation = declaration.jsDoc?.[0];
+function checkCallable(path, source, declaration, label, documentation) {
   if (!documentation?.comment) {
     console.error(`${path}: ${label} の概要がない`);
     errors++;
@@ -40,7 +39,9 @@ function checkCallable(path, source, declaration, label) {
     errors++;
   }
   if (
-    declaration.body?.statements.some(ts.isThrowStatement) &&
+    declaration.body &&
+    ts.isBlock(declaration.body) &&
+    declaration.body.statements.some(ts.isThrowStatement) &&
     !documentation.tags?.some((tag) => tag.tagName.text === "throws")
   ) {
     console.error(`${path}: ${label} の例外の説明がない`);
@@ -55,36 +56,117 @@ for (const path of sourceFiles("src")) {
     true,
   );
   const comments = ts.getLeadingCommentRanges(source.text, 0) ?? [];
-  if (
-    !comments.some((comment) =>
-      source.text.slice(comment.pos, comment.end).startsWith("/**"),
-    )
-  ) {
+  const moduleComment = comments.find((comment) =>
+    source.text.slice(comment.pos, comment.end).startsWith("/**"),
+  );
+  const documentationOf = (node) =>
+    node.jsDoc?.find(
+      (documentation) => documentation.pos !== moduleComment?.pos,
+    );
+  if (!moduleComment) {
     console.error(`${path}: モジュールのドキュメントコメントがない`);
     errors++;
   }
+  const namedExports = new Set(
+    source.statements.flatMap((statement) => {
+      if (
+        ts.isExportAssignment(statement) &&
+        ts.isIdentifier(statement.expression)
+      ) {
+        return [statement.expression.text];
+      }
+      if (
+        ts.isExportDeclaration(statement) &&
+        !statement.moduleSpecifier &&
+        statement.exportClause &&
+        ts.isNamedExports(statement.exportClause)
+      ) {
+        return statement.exportClause.elements.map(
+          (element) => (element.propertyName ?? element.name).text,
+        );
+      }
+      return [];
+    }),
+  );
 
   for (const statement of source.statements) {
     if (
-      !ts.canHaveModifiers(statement) ||
-      !ts
+      ts.isExportAssignment(statement) &&
+      (ts.isArrowFunction(statement.expression) ||
+        ts.isFunctionExpression(statement.expression))
+    ) {
+      checkCallable(
+        path,
+        source,
+        statement.expression,
+        "default",
+        documentationOf(statement) ?? documentationOf(statement.expression),
+      );
+      continue;
+    }
+    const directlyExported =
+      ts.canHaveModifiers(statement) &&
+      ts
         .getModifiers(statement)
-        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+    if (
+      !directlyExported &&
+      !(
+        ts.isVariableStatement(statement) &&
+        statement.declarationList.declarations.some(
+          (declaration) =>
+            ts.isIdentifier(declaration.name) &&
+            namedExports.has(declaration.name.text),
+        )
+      ) &&
+      !(
+        (ts.isFunctionDeclaration(statement) ||
+          ts.isClassDeclaration(statement)) &&
+        statement.name &&
+        namedExports.has(statement.name.text)
+      )
     )
       continue;
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          !directlyExported &&
+          (!ts.isIdentifier(declaration.name) ||
+            !namedExports.has(declaration.name.text))
+        )
+          continue;
+        const initializer = declaration.initializer;
+        if (
+          initializer &&
+          (ts.isArrowFunction(initializer) ||
+            ts.isFunctionExpression(initializer))
+        ) {
+          checkCallable(
+            path,
+            source,
+            initializer,
+            declaration.name.getText(source),
+            documentationOf(declaration) ??
+              documentationOf(statement) ??
+              documentationOf(initializer),
+          );
+        }
+      }
+      continue;
+    }
     if (
       !ts.isFunctionDeclaration(statement) &&
       !ts.isClassDeclaration(statement)
     )
       continue;
     const name = statement.name?.text ?? "default";
-    if (!statement.jsDoc?.[0]?.comment) {
+    if (!documentationOf(statement)?.comment) {
       console.error(`${path}: ${name} の概要がない`);
       errors++;
       continue;
     }
     if (ts.isFunctionDeclaration(statement)) {
-      checkCallable(path, source, statement, name);
+      checkCallable(path, source, statement, name, documentationOf(statement));
     } else {
       for (const member of statement.members) {
         if (!ts.isMethodDeclaration(member)) continue;
@@ -99,6 +181,7 @@ for (const path of sourceFiles("src")) {
           source,
           member,
           `${name}.${member.name.getText(source)}`,
+          documentationOf(member),
         );
       }
     }
