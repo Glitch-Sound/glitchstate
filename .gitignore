@@ -2,3 +2,7 @@
 # 言語やツールごとのものは、この下に追加する。
 node_modules/
 openspec/traceability.md
+dist/
+.vscode-test/
+playwright-report/
+test-results/

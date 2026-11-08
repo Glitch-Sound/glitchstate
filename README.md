@@ -7,24 +7,22 @@
 ### 必要なもの
 
 - Node.js 22.12以上
-- npm
+- Corepackとpnpm
 - Visual Studio Code
 
 ### 手順
 
-1. `npm ci` で依存をインストールする。
+1. `corepack pnpm install --frozen-lockfile` で依存をインストールする。
 2. `npm run check:product` でプロダクトの検査を実行する。
 3. `npm run build` で拡張機能をビルドする。
 4. VS Codeでプロジェクトを開き、`F5`でExtension Development Hostを起動する。
+5. コマンドパレットから `GlitchState: プレビューを開く` を実行し、React Webviewの起動を確認する。
 
 ## 使い方
 
-1. `.gls`ファイルを作成し、状態・イベント・遷移を定義する。
-2. VS Codeでファイルを開き、プレビューを表示する。
-3. 状態定義・状態遷移図・状態遷移表を同一画面で確認する。
-4. DSLを編集すると、プレビューが自動更新される。
-5. 状態を選択すると、各表示領域の関連箇所が強調される。
-6. 状態遷移図は拡大・縮小・リセットでき、PNG/SVG形式で保存できる。
+現在は開発基盤だけを用意している。\
+コマンドパレットから `GlitchState: プレビューを開く` を実行すると、起動確認用のWebviewが表示される。\
+DSLの解析、状態遷移の表示、編集との連携は未実装である。
 
 ## 開発
 
@@ -33,7 +31,7 @@ OpenSpec の部分を切り離して納品する場合は、納品物からこ�
 
 ### 開発に必要なもの
 
-- Node.js 22.12 以上と npm(OpenSpec CLI と検査スクリプトに使う)
+- Node.js 22.12以上、Corepack、pnpm
 - git(コミット前のフックで全体検証を実行する)
 
 ### OpenSpec のグローバル設定
@@ -53,11 +51,14 @@ Windows PowerShell 5.1 では、2行目が `expected array, received string` で
 
 ### 開発の準備
 
-1. セットアップの手順で、プロダクトの依存を入れる。
-2. `npm install` で、OpenSpec を入れる。
-3. OpenSpec のグローバル設定を行う。
-4. `git config core.hooksPath .githooks` で、コミット前のフックを有効にする。
-5. `npm run check` で、全体検証が成功することを確かめる。
+1. セットアップの手順で、プロダクトと開発用の依存を入れる。
+2. OpenSpecのグローバル設定を行う。
+3. `git config core.hooksPath .githooks` で、コミット前のフックを有効にする。
+4. `npm run check` で、全体検証が成功することを確かめる。
+
+プロダクトだけの検査は `npm run check:product` で実行する。\
+単体テストは `corepack pnpm test`、視覚テストは `corepack pnpm test:visual`、VS Code統合テストは `corepack pnpm test:extension` で実行する。\
+統合テストは初回にVS Codeのテスト用バイナリを取得する。
 
 全体検証は、プロダクトの検査と OpenSpec の検査をまとめて実行し、コミットの前にフックで自動で実行される。\
 AI ツール向けの生成されたファイル(`.github/skills/`、`.claude/skills/`、`.agents/skills/` のうち、使うツールのもの)はコミットし、手で編集しない。\

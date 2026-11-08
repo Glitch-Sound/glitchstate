@@ -39,10 +39,19 @@
 │   ├── schemas/            # 成果物の作り方(共通 schema)
 │   └── specs/              # 正式仕様
 ├── scripts/                # 検査スクリプト(テンプレートの共通部分)
+├── dist/                   # ビルド成果物(コミットしない)
+├── biome.json              # フォーマットと静的解析
+├── playwright.config.ts    # UI・視覚テスト
+├── pnpm-lock.yaml          # プロダクトと開発用依存の固定
+├── pnpm-workspace.yaml     # pnpmのインストール設定
+├── steiger.config.ts       # WebviewのFSDルール
+├── tsconfig.json           # TypeScriptの型検査
+├── vite.config.ts          # Webviewのビルド
+├── vitest.config.ts        # 単体テスト
 ├── AGENTS.md               # 開発エージェント向けの指示
 ├── CLAUUDE.md              # Claude Code に AGENTS.md を読み込ませる
 ├── README.md               # プロジェクトの説明とセットアップ
-└── package.json            # OpenSpec の版と全体検証の定義
+└── package.json            # 拡張機能、依存、ビルドと全体検証の定義
 ```
 
 スキルのフォルダは、使う AI ツールのものだけができる。
