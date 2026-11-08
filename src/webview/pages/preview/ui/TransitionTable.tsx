@@ -2,6 +2,7 @@
 import { type ReactElement, useId } from "react";
 import type { GlsModel } from "../../../../core";
 import { buildEventRows } from "../model/build-event-rows";
+import { ConditionalTransitionCell } from "./ConditionalTransitionCell";
 
 /** 状態遷移表または不足する軸の案内を表示する。
  * @param props 定義順の状態とイベント、IDで関連付けた遷移のモデル。
@@ -106,14 +107,23 @@ export function TransitionTable(props: { model: GlsModel }): ReactElement {
                       );
                       return transition ? (
                         <td key={state.id} headers={headers}>
-                          <div className="transition-action">
-                            {transition.action ?? "-"}
-                          </div>
-                          <div className="transition-target">
-                            {transition.targetStateId === null
-                              ? "-"
-                              : names.get(transition.targetStateId)}
-                          </div>
+                          {"branches" in transition ? (
+                            <ConditionalTransitionCell
+                              transition={transition}
+                              names={names}
+                            />
+                          ) : (
+                            <>
+                              <div className="transition-action">
+                                {transition.action ?? "-"}
+                              </div>
+                              <div className="transition-target">
+                                {transition.targetStateId === null
+                                  ? "-"
+                                  : names.get(transition.targetStateId)}
+                              </div>
+                            </>
+                          )}
                         </td>
                       ) : (
                         <td

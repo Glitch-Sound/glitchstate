@@ -1186,6 +1186,264 @@ const categoryRepairModel = {
     },
   ],
 };
+
+const conditionalSource = categorySource
+  .replace('"操作" > "運転" > "開始系"', '"操作" > "運転"')
+  .replace(
+    "Transition IDLE on START -> RUNNING:\n    記録する",
+    [
+      "Transition IDLE on START:",
+      "    Common:",
+      "        要求を記録する",
+      '    Branch "準備完了" -> RUNNING:',
+      "        開始する",
+      '    Branch "それ以外" -> -:',
+      "        -",
+    ].join("\n"),
+  );
+const conditionalTransition = {
+  fromStateId: "IDLE",
+  eventId: "START",
+  commonAction: "要求を記録する",
+  branches: [
+    { condition: "準備完了", action: "開始する", targetStateId: "RUNNING" },
+    { condition: "それ以外", action: null, targetStateId: null },
+  ],
+};
+const conditionalModel = {
+  ...categoryModel,
+  events: [{ id: "START", name: "開始", categoryPath: ["操作", "運転"] }],
+  transitions: [conditionalTransition],
+};
+const conditionalRepairSource = conditionalSource
+  .replace('"待機"', '"再開待ち"')
+  .replace('"操作" > "運転"', '"業務" > "復旧"')
+  .replace('"系統" > "区分" > "種別"', '"領域" > "用途"')
+  .replace("要求を記録する", "再開要求を記録する")
+  .replace('"準備完了"', '"復旧可能"')
+  .replace("開始する", "復旧する")
+  .replace("-> RUNNING:", "-> RECOVERED:");
+const conditionalRepairModel = {
+  ...categoryRepairModel,
+  transitions: [
+    {
+      ...conditionalTransition,
+      commonAction: "再開要求を記録する",
+      branches: [
+        {
+          condition: "復旧可能",
+          action: "復旧する",
+          targetStateId: "RECOVERED",
+        },
+        conditionalTransition.branches[1],
+      ],
+    },
+  ],
+};
+
+test("REQ-027-S01 共通処理と条件と分岐先、形式と分類の編集を通知する", async () => {
+  const doc = host.doc();
+  doc.text = conditionalSource;
+  const panel = await open(doc);
+  const branches = conditionalTransition.branches;
+  const changes = [
+    [
+      conditionalSource.replace("要求を記録する", "変更した共通"),
+      {
+        ...conditionalModel,
+        transitions: [
+          { ...conditionalTransition, commonAction: "変更した共通" },
+        ],
+      },
+    ],
+    [
+      conditionalSource.replace('"準備完了"', '"変更した条件"'),
+      {
+        ...conditionalModel,
+        transitions: [
+          {
+            ...conditionalTransition,
+            branches: [
+              { ...branches[0], condition: "変更した条件" },
+              branches[1],
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      conditionalSource.replace("開始する", "変更した処理"),
+      {
+        ...conditionalModel,
+        transitions: [
+          {
+            ...conditionalTransition,
+            branches: [{ ...branches[0], action: "変更した処理" }, branches[1]],
+          },
+        ],
+      },
+    ],
+    [
+      conditionalSource.replace("-> RUNNING:", "-> -:"),
+      {
+        ...conditionalModel,
+        transitions: [
+          {
+            ...conditionalTransition,
+            branches: [{ ...branches[0], targetStateId: null }, branches[1]],
+          },
+        ],
+      },
+    ],
+    [
+      conditionalSource.replace("-> RUNNING:", "-> RECOVERED:"),
+      {
+        ...conditionalModel,
+        transitions: [
+          {
+            ...conditionalTransition,
+            branches: [
+              { ...branches[0], targetStateId: "RECOVERED" },
+              branches[1],
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      conditionalSource + '\n    Branch "追加" -> IDLE:\n        追加処理',
+      {
+        ...conditionalModel,
+        transitions: [
+          {
+            ...conditionalTransition,
+            branches: [
+              ...branches,
+              { condition: "追加", action: "追加処理", targetStateId: "IDLE" },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      conditionalSource.replace('\n    Branch "それ以外" -> -:\n        -', ""),
+      {
+        ...conditionalModel,
+        transitions: [{ ...conditionalTransition, branches: [branches[0]] }],
+      },
+    ],
+    [
+      conditionalSource.replace(
+        '    Branch "準備完了" -> RUNNING:\n        開始する\n    Branch "それ以外" -> -:\n        -',
+        '    Branch "それ以外" -> -:\n        -\n    Branch "準備完了" -> RUNNING:\n        開始する',
+      ),
+      {
+        ...conditionalModel,
+        transitions: [
+          { ...conditionalTransition, branches: [branches[1], branches[0]] },
+        ],
+      },
+    ],
+    [categorySource, categoryModel],
+    [conditionalSource, conditionalModel],
+    [
+      conditionalSource.replace('"操作" > "運転"', '"通信" > "監視"'),
+      {
+        ...conditionalModel,
+        events: [{ id: "START", name: "開始", categoryPath: ["通信", "監視"] }],
+      },
+    ],
+    [
+      conditionalSource.replace('"系統" > "区分" > "種別"', '"領域" > "用途"'),
+      { ...conditionalModel, eventCategoryHeaders: ["領域", "用途"] },
+    ],
+  ] as const;
+  for (const [text, expected] of changes) {
+    doc.text = text;
+    doc.version++;
+    host.changed.emit({ document: doc });
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: expected, hasErrors: false }),
+    );
+  }
+});
+test("REQ-027-S02 正常からBranch行の参照エラーで保ち異なる全内容へ回復する", async () => {
+  const doc = host.doc();
+  doc.text = conditionalSource;
+  const panel = await open(doc);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: conditionalModel, hasErrors: false }),
+  );
+  doc.text = conditionalSource.replace("-> RUNNING:", "-> MISSING:");
+  doc.version++;
+  host.changed.emit({ document: doc });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: conditionalModel, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "reference",
+      range: expect.objectContaining({ start: { line: 11, character: 0 } }),
+      message: "遷移先状態ID MISSING は未宣言",
+    }),
+  ]);
+  doc.text = conditionalRepairSource;
+  doc.version++;
+  host.changed.emit({ document: doc });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      model: conditionalRepairModel,
+      hasErrors: false,
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+test("REQ-027-S05 対象外の分岐編集を無視し初回エラーで他文書を混ぜない", async () => {
+  const a = host.doc();
+  a.text = conditionalSource;
+  const panel = await open(a);
+  const count = panel.webview.postMessage.mock.calls.length;
+  const b = host.doc("b.gls");
+  b.text = conditionalSource.replace("-> RUNNING:", "-> MISSING:");
+  host.changed.emit({ document: b });
+  expect(panel.webview.postMessage.mock.calls).toHaveLength(count);
+  expect(host.diagnostics.has("file:///b.gls")).toBe(false);
+  await open(b);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///b.gls",
+      model: null,
+      hasErrors: true,
+    }),
+  );
+  expect(host.panels).toHaveLength(1);
+});
+for (const command of [false, true]) {
+  test(`REQ-027-S04 小さい版番号で分岐を更新する: command=${command}`, async () => {
+    const previous = host.doc();
+    previous.version = 9;
+    previous.text = conditionalSource;
+    const panel = await open(previous);
+    previous.isClosed = true;
+    host.closed.emit(previous);
+    const reopened = host.doc();
+    reopened.text = conditionalRepairSource;
+    if (command) await open(reopened);
+    else {
+      reopened.version = 2;
+      host.changed.emit({ document: reopened });
+    }
+    expect(reopened.version).toBeLessThan(previous.version);
+    expect(host.panels).toHaveLength(1);
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sequence: 2,
+        model: conditionalRepairModel,
+        hasErrors: false,
+      }),
+    );
+  });
+}
 test("REQ-021-S01 分類の追加と移動と除去と宣言順を通知する", async () => {
   const document = host.doc();
   document.text = categorySource;

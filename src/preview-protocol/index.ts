@@ -35,7 +35,7 @@ const event = z.strictObject({
     .max(3)
     .optional(),
 });
-const transition = z.strictObject({
+const plainTransition = z.strictObject({
   fromStateId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
   eventId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
   action: z
@@ -47,6 +47,37 @@ const transition = z.strictObject({
     .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
     .nullable(),
 });
+const conditionalTransition = z.strictObject({
+  fromStateId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  eventId: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  commonAction: z
+    .string()
+    .refine((value) => value.trim().length > 0)
+    .nullable(),
+  branches: z
+    .array(
+      z.strictObject({
+        condition: z
+          .string()
+          .refine((value) => value.trim().length > 0 && !/["\r\n]/.test(value)),
+        action: z
+          .string()
+          .refine((value) => value.trim().length > 0)
+          .nullable(),
+        targetStateId: z
+          .string()
+          .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+          .nullable(),
+      }),
+    )
+    .min(1)
+    .refine(
+      (branches) =>
+        new Set(branches.map((branch) => branch.condition)).size ===
+        branches.length,
+    ),
+});
+const transition = z.union([plainTransition, conditionalTransition]);
 const model = z
   .strictObject({
     states: z.array(state),
@@ -81,7 +112,13 @@ const model = z
         (item) =>
           states.has(item.fromStateId) &&
           events.has(item.eventId) &&
-          (item.targetStateId === null || states.has(item.targetStateId)),
+          ("branches" in item
+            ? item.branches.every(
+                (branch) =>
+                  branch.targetStateId === null ||
+                  states.has(branch.targetStateId),
+              )
+            : item.targetStateId === null || states.has(item.targetStateId)),
       )
     );
   });

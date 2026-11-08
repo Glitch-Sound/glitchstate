@@ -19,12 +19,29 @@ export interface EventDefinition {
   readonly categoryPath?: readonly string[];
 }
 
-export interface TransitionDefinition {
+export interface PlainTransitionDefinition {
   readonly fromStateId: string;
   readonly eventId: string;
   readonly action: string | null;
   readonly targetStateId: string | null;
 }
+
+export interface TransitionBranch {
+  readonly condition: string;
+  readonly action: string | null;
+  readonly targetStateId: string | null;
+}
+
+export interface ConditionalTransitionDefinition {
+  readonly fromStateId: string;
+  readonly eventId: string;
+  readonly commonAction: string | null;
+  readonly branches: readonly TransitionBranch[];
+}
+
+export type TransitionDefinition =
+  | PlainTransitionDefinition
+  | ConditionalTransitionDefinition;
 
 export interface GlsDiagnostic {
   readonly code: string;

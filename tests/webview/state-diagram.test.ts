@@ -24,6 +24,104 @@ const build = async (value: GlsModel) =>
     await import("../../src/webview/pages/preview/model/build-state-diagram")
   ).buildStateDiagram(value);
 
+const conditional = {
+  fromStateId: "Z_IDLE",
+  eventId: "START",
+  commonAction: "共通処理",
+  branches: [
+    { condition: "準備完了", action: "開始する", targetStateId: "A_RUN" },
+    { condition: "異常", action: null, targetStateId: "FAILED" },
+  ],
+};
+test("REQ-026-S01 処理の有無によらず全分岐先を変換する", async () => {
+  const input = {
+    ...model,
+    states: [
+      ...states,
+      { id: "FAILED", name: "失敗", color: "#FF0000", meaning: "止まる" },
+    ],
+    transitions: [{ ...conditional, commonAction: null }],
+  };
+  const before = structuredClone(input);
+  const graph = await build(input);
+  expect(
+    graph.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: edge.label,
+    })),
+  ).toEqual([
+    { id: "Z_IDLE:A_RUN", source: "Z_IDLE", target: "A_RUN", label: undefined },
+    {
+      id: "Z_IDLE:FAILED",
+      source: "Z_IDLE",
+      target: "FAILED",
+      label: undefined,
+    },
+  ]);
+  expect(graph.nodes.map((node) => node.id)).toEqual([
+    "Z_IDLE",
+    "A_RUN",
+    "FAILED",
+  ]);
+  expect(input).toEqual(before);
+});
+test("REQ-026-S02 分岐と平坦な遷移を同じ有向ペアへ集約する", async () => {
+  const graph = await build({
+    ...model,
+    transitions: [
+      {
+        ...conditional,
+        branches: conditional.branches.map((branch) => ({
+          ...branch,
+          targetStateId: "A_RUN",
+        })),
+      },
+      { ...transition, eventId: "RETRY" },
+    ],
+  });
+  expect(graph.edges.map((edge) => [edge.source, edge.target])).toEqual([
+    ["Z_IDLE", "A_RUN"],
+  ]);
+});
+for (const [title, branches, extra, expected] of [
+  [
+    "すべてなし",
+    conditional.branches.map((branch) => ({ ...branch, targetStateId: null })),
+    [],
+    [],
+  ],
+  [
+    "自己遷移となし",
+    [
+      { ...conditional.branches[0], targetStateId: "Z_IDLE" },
+      { ...conditional.branches[1], targetStateId: null },
+    ],
+    [],
+    [["Z_IDLE", "Z_IDLE"]],
+  ],
+  [
+    "相互遷移",
+    [conditional.branches[0]],
+    [{ ...transition, fromStateId: "A_RUN", targetStateId: "Z_IDLE" }],
+    [
+      ["Z_IDLE", "A_RUN"],
+      ["A_RUN", "Z_IDLE"],
+    ],
+  ],
+] as const) {
+  test(`REQ-026-S03 分岐先を区別する: ${title}`, async () => {
+    const graph = await build({
+      ...model,
+      transitions: [{ ...conditional, branches }, ...extra],
+    });
+    expect(graph.edges.map((edge) => [edge.source, edge.target])).toEqual(
+      expected,
+    );
+  });
+}
+
 test("REQ-014-S01 名前と指定カラーをIDと対応付け定義順を保つ", async () => {
   const result = await build(model);
   expect(result.nodes.map(({ id, data }) => ({ id, data }))).toEqual([

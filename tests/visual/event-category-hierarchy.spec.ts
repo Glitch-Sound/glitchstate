@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { type GlsModel, parseGls } from "../../src/core";
+import {
+  type GlsModel,
+  type PlainTransitionDefinition,
+  parseGls,
+} from "../../src/core";
 
 const states = [
   { id: "IDLE", name: "待機", meaning: "待つ", color: "#4F46E5" },
@@ -12,19 +16,20 @@ const events = [
   { id: "A_STOP", name: "停止", categoryPath: ["操作", "運転"] },
   { id: "B_INIT", name: "初期化", categoryPath: ["操作", "保守"] },
 ];
-const model: GlsModel = {
-  states,
-  events,
-  eventCategoryHeaders: ["系統", "区分", "種別"],
-  transitions: events.flatMap((event, row) =>
-    states.map((state, column) => ({
-      fromStateId: state.id,
-      eventId: event.id,
-      action: `処理${row}-${column}`,
-      targetStateId: states[(column + 1) % states.length].id,
-    })),
-  ),
-};
+const model: GlsModel & { transitions: readonly PlainTransitionDefinition[] } =
+  {
+    states,
+    events,
+    eventCategoryHeaders: ["系統", "区分", "種別"],
+    transitions: events.flatMap((event, row) =>
+      states.map((state, column) => ({
+        fromStateId: state.id,
+        eventId: event.id,
+        action: `処理${row}-${column}`,
+        targetStateId: states[(column + 1) % states.length].id,
+      })),
+    ),
+  };
 const table = (page: Page) =>
   page.getByRole("table", { name: "状態遷移表", exact: true });
 const stateTable = (page: Page) =>
@@ -100,9 +105,9 @@ async function assertCells(page: Page, next: GlsModel) {
     );
     await expect(cells).toHaveCount(next.states.length);
     for (const [column, state] of next.states.entries()) {
-      const transition = next.transitions.find(
-        (t) => t.eventId === event.id && t.fromStateId === state.id,
-      );
+      const transition = (
+        next.transitions as readonly PlainTransitionDefinition[]
+      ).find((t) => t.eventId === event.id && t.fromStateId === state.id);
       if (transition) {
         await expect(
           cells.nth(column).locator(".transition-action"),

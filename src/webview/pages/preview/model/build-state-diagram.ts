@@ -21,14 +21,20 @@ export function buildStateDiagram(model: GlsModel): {
   }));
   const pairs = new Map<string, Edge>();
   for (const transition of model.transitions) {
-    if (transition.targetStateId === null) continue;
-    const id = `${transition.fromStateId}:${transition.targetStateId}`;
-    pairs.set(id, {
-      id,
-      type: "state",
-      source: transition.fromStateId,
-      target: transition.targetStateId,
-    });
+    const targets =
+      "branches" in transition
+        ? transition.branches.map((branch) => branch.targetStateId)
+        : [transition.targetStateId];
+    for (const target of targets) {
+      if (target === null) continue;
+      const id = `${transition.fromStateId}:${target}`;
+      pairs.set(id, {
+        id,
+        type: "state",
+        source: transition.fromStateId,
+        target,
+      });
+    }
   }
   return { nodes, edges: [...pairs.values()] };
 }

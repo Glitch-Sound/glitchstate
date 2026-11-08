@@ -27,6 +27,7 @@
 
 .transition-section {
   --transition-line-gap: 0.5em;
+  --transition-branch-line-width: 1px;
   --transition-section-gap: 1.5em;
   --transition-undefined-color: var(--vscode-errorForeground, #d32f2f);
   margin-top: var(--transition-section-gap);
@@ -54,4 +55,32 @@
 .event-category-header {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.transition-common,
+.branch-condition,
+.branch-action,
+.branch-target {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.transition-branches {
+  display: grid;
+  margin-top: var(--transition-line-gap);
+}
+
+.transition-branch {
+  min-width: 0;
+  padding-inline: var(--transition-line-gap);
+}
+
+.transition-branch + .transition-branch {
+  border-left: var(--transition-branch-line-width) solid
+    var(--vscode-panel-border);
+}
+
+.branch-action,
+.branch-target {
+  margin-top: var(--transition-line-gap);
 }

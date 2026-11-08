@@ -2,7 +2,7 @@
 import type {
   GlsDiagnostic,
   ParseResult,
-  TransitionDefinition,
+  PlainTransitionDefinition,
 } from "../model/gls-model";
 import {
   type EventCandidate,
@@ -17,6 +17,7 @@ import {
   type TransitionCandidate,
   validateTransitions,
 } from "../validator/validate-transitions";
+import { parseConditionalTransition } from "./parse-conditional-transition";
 
 type BodyLine = { text: string; line: number };
 
@@ -49,7 +50,13 @@ type Block =
     }
   | {
       kind: "transition";
-      reference: Omit<TransitionDefinition, "action">;
+      reference: Omit<PlainTransitionDefinition, "action">;
+      line: number;
+      body: BodyLine[];
+    }
+  | {
+      kind: "conditional";
+      reference: { fromStateId: string; eventId: string };
       line: number;
       body: BodyLine[];
     };
@@ -79,6 +86,14 @@ export function parseGls(source: string): ParseResult {
           meaning: text,
         },
       });
+    } else if (current.kind === "conditional") {
+      const parsed = parseConditionalTransition(
+        current.reference,
+        current.line,
+        current.body,
+      );
+      transitions.push(parsed.candidate);
+      diagnostics.push(...parsed.diagnostics);
     } else {
       transitions.push({
         line: current.line,
@@ -98,7 +113,9 @@ export function parseGls(source: string): ParseResult {
     if (!line.trim()) continue;
     const lineNumber = index + 1;
     if (/^\s/.test(line)) {
-      if (current && /^ {4}\S/.test(line))
+      if (current?.kind === "conditional")
+        current.body.push({ text: line, line: lineNumber });
+      else if (current && /^ {4}\S/.test(line))
         current.body.push({ text: line.slice(4), line: lineNumber });
       else
         diagnostics.push({
@@ -118,6 +135,7 @@ export function parseGls(source: string): ParseResult {
     const header = /^EventCategoryHeaders\b([\s\S]*)$/.exec(line);
     const transition =
       /^Transition +([^ ]+) +on +([^ ]+) +-> +([^ :]+): *$/.exec(line);
+    const conditional = /^Transition +([^ ]+) +on +([^ :]+): *$/.exec(line);
     if (state)
       current = {
         kind: "state",
@@ -172,6 +190,13 @@ export function parseGls(source: string): ParseResult {
           eventId: transition[2],
           targetStateId: transition[3] === "-" ? null : transition[3],
         },
+        line: lineNumber,
+        body: [],
+      };
+    else if (conditional)
+      current = {
+        kind: "conditional",
+        reference: { fromStateId: conditional[1], eventId: conditional[2] },
         line: lineNumber,
         body: [],
       };
