@@ -7,4 +7,5 @@ exports.run = async () => {
   assert.ok(commands.includes("glitchstate.openPreview"));
   await require("./state-preview.test.cjs").run();
   await require("./transition-preview.test.cjs").run();
+  await require("./diagram-preview.test.cjs").run();
 };

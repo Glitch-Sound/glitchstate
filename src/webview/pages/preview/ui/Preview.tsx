@@ -1,20 +1,25 @@
-/** 共通モデルから状態定義表と状態遷移表を描画する。 */
-import type { ReactElement } from "react";
+/** 共通モデルから状態定義表、状態遷移図、状態遷移表を描画する。 */
+import { type ReactElement, useEffect } from "react";
 import type { GlsModel } from "../../../../core";
+import { StateDiagram } from "./StateDiagram";
 import { TransitionTable } from "./TransitionTable";
 import "./preview.css";
 
 interface PreviewProps {
   model: GlsModel | null;
   hasErrors: boolean;
+  onRenderReady?: () => void;
 }
 
 /** 状態定義の内容と現在の解析状況を表示する。
- * @param props 定義順のモデルと現在の解析エラーの有無。
- * @returns 状態定義表と状態遷移表、または表示できない理由。
+ * @param props 定義順のモデル、解析エラーの有無と3表示の準備完了の通知先。
+ * @returns 状態定義表、状態遷移図、状態遷移表、または表示できない理由。
  */
 export function Preview(props: PreviewProps): ReactElement {
-  const { model, hasErrors } = props;
+  const { model, hasErrors, onRenderReady } = props;
+  useEffect(() => {
+    if (model === null) onRenderReady?.();
+  }, [model, onRenderReady]);
   return (
     <main>
       {hasErrors && (
@@ -56,6 +61,7 @@ export function Preview(props: PreviewProps): ReactElement {
               <p role="status">状態が定義されていない。</p>
             )}
           </section>
+          <StateDiagram model={model} onRenderReady={onRenderReady} />
           <TransitionTable model={model} />
         </>
       )}

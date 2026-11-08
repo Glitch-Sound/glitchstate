@@ -1,5 +1,5 @@
 /** VS Codeの通知を受け取り、共通モデルをプレビューへ渡す。 */
-import React, { useLayoutEffect } from "react";
+import React, { useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import {
   isPreviewUpdate,
@@ -7,6 +7,7 @@ import {
   type WebviewMessage,
 } from "../../preview-protocol";
 import { Preview } from "../pages/preview";
+import { completePreviewRender } from "./render-completion";
 import "./style.css";
 
 declare const acquireVsCodeApi: () => {
@@ -18,15 +19,18 @@ if (element === null) throw new Error("Webviewの起動先が見つからない"
 const root = createRoot(element);
 
 function PreviewRoot({ message }: { message: PreviewUpdate }) {
-  useLayoutEffect(() => {
-    vscode.postMessage({
-      type: "glitchstate.rendered",
-      uri: message.uri,
-      version: message.version,
-      sequence: message.sequence,
-    });
+  const onRenderReady = useCallback(() => {
+    completePreviewRender(message, latest, (value) =>
+      vscode.postMessage(value),
+    );
   }, [message]);
-  return <Preview model={message.model} hasErrors={message.hasErrors} />;
+  return (
+    <Preview
+      model={message.model}
+      hasErrors={message.hasErrors}
+      onRenderReady={onRenderReady}
+    />
+  );
 }
 
 let latest: PreviewUpdate | undefined;

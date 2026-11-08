@@ -1,0 +1,54 @@
+.state-diagram-section {
+  --diagram-height: 360px;
+  --diagram-edge-mix: 45%;
+  --diagram-node-mix: 12%;
+  --diagram-foreground: var(--vscode-foreground, #cccccc);
+  --diagram-background: var(--vscode-editor-background, #1e1e1e);
+  --diagram-edge-color: color-mix(
+    in srgb,
+    var(--diagram-foreground) var(--diagram-edge-mix),
+    var(--diagram-background)
+  );
+  margin-top: 1.5em;
+  color: var(--diagram-foreground);
+}
+.state-diagram-canvas {
+  height: var(--diagram-height);
+  background: var(--diagram-background);
+  width: 100%;
+}
+.state-node {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  width: 100%;
+  overflow-wrap: anywhere;
+  background: color-mix(
+    in srgb,
+    var(--state-color) var(--diagram-node-mix),
+    var(--diagram-background)
+  );
+}
+.state-node .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+.diagram-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.state-diagram-canvas .state-edge-path {
+  stroke: var(--diagram-edge-color);
+  fill: none;
+}
+.diagram-defs marker path {
+  fill: var(--diagram-edge-color);
+}

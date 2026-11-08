@@ -256,16 +256,18 @@ for (const { id, version, name } of [
       name,
       "開始を待つ状態",
     ]);
-    expect(
-      await page.evaluate(
-        () => (window as unknown as { glsMessages: unknown[] }).glsMessages,
-      ),
-    ).toContainEqual({
-      type: "glitchstate.rendered",
-      uri: "file:///a.gls",
-      version,
-      sequence: 2,
-    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { glsMessages: unknown[] }).glsMessages,
+        ),
+      )
+      .toContainEqual({
+        type: "glitchstate.rendered",
+        uri: "file:///a.gls",
+        version,
+        sequence: 2,
+      });
     await page.evaluate((data) => window.postMessage(data, "*"), {
       type: "glitchstate.update",
       uri: "file:///a.gls",

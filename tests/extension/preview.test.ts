@@ -938,3 +938,192 @@ for (const command of [false, true]) {
     );
   });
 }
+
+test("REQ-017-S01 3表示へ同じ現在のモデルを未保存の編集で送る", async () => {
+  const document = host.doc();
+  document.text = flowSource.replace("-> -:", "-> A_FIRST:");
+  const panel = await open(document);
+  document.text = document.text
+    .replace("待機", "図の更新")
+    .replace("記録する", "図の処理")
+    .replace("-> A_FIRST:", "-> Z_LAST:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      hasErrors: false,
+      model: {
+        ...flowModel,
+        states: [{ ...initialStates[0], name: "図の更新" }, initialStates[1]],
+        transitions: [
+          { ...flowTransition, action: "図の処理", targetStateId: "Z_LAST" },
+        ],
+      },
+    }),
+  );
+});
+test("REQ-017-S02 参照エラーでは3表示の正常モデルを保持する", async () => {
+  const document = host.doc();
+  document.text = flowSource.replace("-> -:", "-> A_FIRST:");
+  const panel = await open(document);
+  document.text = flowSource
+    .replace("待機", "不正な途中")
+    .replace("-> -:", "-> MISSING:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      hasErrors: true,
+      model: {
+        ...flowModel,
+        transitions: [{ ...flowTransition, targetStateId: "A_FIRST" }],
+      },
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "reference",
+      message: "遷移先状態ID MISSING は未宣言",
+      range: expect.objectContaining({ start: { line: 6, character: 0 } }),
+    }),
+  ]);
+});
+test("REQ-017-S03 正常、参照エラーで保持、異なる名前と処理と遷移先へ回復する", async () => {
+  const document = host.doc();
+  document.text = flowSource.replace("-> -:", "-> A_FIRST:");
+  const panel = await open(document);
+  const before = {
+    ...flowModel,
+    transitions: [{ ...flowTransition, targetStateId: "A_FIRST" }],
+  };
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: before, hasErrors: false }),
+  );
+  document.text = flowSource
+    .replace("待機", "編集中")
+    .replace("-> -:", "-> MISSING:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: before, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toHaveLength(1);
+  document.text = flowSource
+    .replace("待機", "図の修正後")
+    .replace("記録する", "修正した処理")
+    .replace("-> -:", "-> Z_LAST:");
+  document.version++;
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      hasErrors: false,
+      model: {
+        ...flowModel,
+        states: [{ ...initialStates[0], name: "図の修正後" }, initialStates[1]],
+        transitions: [
+          {
+            ...flowTransition,
+            action: "修正した処理",
+            targetStateId: "Z_LAST",
+          },
+        ],
+      },
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+test("REQ-017-S04 不正な別文書へ切り替えたら3表示のモデルを残さない", async () => {
+  const a = host.doc();
+  a.text = flowSource;
+  const panel = await open(a);
+  const b = host.doc("b.gls");
+  b.text = flowSource.replace("-> -:", "-> MISSING:");
+  await open(b);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///b.gls",
+      model: null,
+      hasErrors: true,
+    }),
+  );
+  expect(host.panels).toHaveLength(1);
+});
+test("REQ-017-S08 対象外の編集で3表示の通知も診断も変えない", async () => {
+  const a = host.doc();
+  a.text = flowSource;
+  const panel = await open(a);
+  const calls = panel.webview.postMessage.mock.calls.length;
+  const b = host.doc("b.gls");
+  b.text = flowSource.replace("待機", "別文書").replace("-> -:", "-> MISSING:");
+  host.changed.emit({ document: b });
+  expect(panel.webview.postMessage.mock.calls).toHaveLength(calls);
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+  expect(host.diagnostics.has("file:///b.gls")).toBe(false);
+});
+
+test("REQ-017-S05 遅れた解析結果で3表示のモデルと診断を戻さない", async () => {
+  const document = host.doc();
+  document.text = flowSource;
+  const panel = await open(document);
+  const latest = host.doc();
+  latest.version = 2;
+  latest.text = flowSource
+    .replace("待機", "最新の図")
+    .replace("記録する", "最新の処理")
+    .replace("-> -:", "-> A_FIRST:");
+  document.getText = () => {
+    host.changed.emit({ document: latest });
+    return flowSource.replace("-> -:", "-> MISSING:");
+  };
+  host.changed.emit({ document });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      version: 2,
+      hasErrors: false,
+      model: {
+        ...flowModel,
+        states: [{ ...initialStates[0], name: "最新の図" }, initialStates[1]],
+        transitions: [
+          { ...flowTransition, action: "最新の処理", targetStateId: "A_FIRST" },
+        ],
+      },
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+
+for (const command of [false, true]) {
+  test(`REQ-017-S06 再オープン後の3表示モデルを更新する: command=${command}`, async () => {
+    const previous = host.doc();
+    previous.text = flowSource.replace("-> -:", "-> A_FIRST:");
+    previous.version = 9;
+    const panel = await open(previous);
+    previous.isClosed = true;
+    host.closed.emit(previous);
+    const reopened = host.doc();
+    reopened.text = flowSource
+      .replace("待機", "開き直した図")
+      .replace("-> -:", "-> Z_LAST:");
+    if (command) await open(reopened);
+    else {
+      reopened.version = 2;
+      host.changed.emit({ document: reopened });
+    }
+    expect(reopened.version).toBeLessThan(previous.version);
+    expect(host.panels).toHaveLength(1);
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sequence: 2,
+        hasErrors: false,
+        model: {
+          ...flowModel,
+          states: [
+            { ...initialStates[0], name: "開き直した図" },
+            initialStates[1],
+          ],
+          transitions: [{ ...flowTransition, targetStateId: "Z_LAST" }],
+        },
+      }),
+    );
+  });
+}
