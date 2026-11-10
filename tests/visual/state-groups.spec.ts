@@ -356,6 +356,22 @@ test("REQ-030-S02 REQ-031-S05 同名グループとID衝突、別枠の終点と
   const g = await bounds(frame(page));
   const h = await bounds(frame(page, "A"));
   expect(h.y).toBeGreaterThan(g.y + g.height);
+  const j = await bounds(frame(page, "J"));
+  for (const id of ["D", "E"]) {
+    await expect(node(page, id)).toHaveCount(1);
+    await expect(node(page, id).locator(".state-node-label")).toHaveText(
+      "同名状態",
+    );
+    const state = await bounds(node(page, id));
+    contains(j, state);
+    for (const other of [g, h])
+      expect(
+        state.x + state.width <= other.x ||
+          state.x >= other.x + other.width ||
+          state.y + state.height <= other.y ||
+          state.y >= other.y + other.height,
+      ).toBe(true);
+  }
   await assertPairs(page, [
     ["state-group:G", "X"],
     ["A", "Y"],
@@ -404,7 +420,7 @@ test("REQ-030-S03 長い名前と実ループを枠に収め画面から欠落�
     0,
   );
 });
-test("REQ-030-S04 REQ-032-S01 REQ-032-S02 両表の個別セルと分類を保ちグループ除去で元の配置へ戻す", async ({
+test("REQ-030-S04 REQ-032-S01 両表の個別セルと分類を保ちグループ除去で元の配置へ戻す", async ({
   page,
 }) => {
   await start(page);
@@ -435,6 +451,92 @@ test("REQ-030-S04 REQ-032-S01 REQ-032-S02 両表の個別セルと分類を保�
         els.map((el) => el.getBoundingClientRect().toJSON()),
       ),
   ).toEqual(positions);
+});
+test("REQ-032-S02 グループ付きでも分類なしと3段分類の見出しと結合と全交点を保つ", async ({
+  page,
+}) => {
+  const next: GlsModel = {
+    ...model,
+    events: [
+      { id: "RETRY", name: "再試行" },
+      { id: "START", name: "開始", categoryPath: ["操作", "運転", "開始系"] },
+      { id: "STOP", name: "停止", categoryPath: ["操作", "運転", "停止系"] },
+      { id: "CHECK", name: "点検", categoryPath: ["操作", "保守"] },
+      { id: "RESET", name: "初期化", categoryPath: ["通信"] },
+    ],
+    transitions: [
+      { ...plain("A", null, "RETRY"), action: null },
+      {
+        ...branch,
+        commonAction: "再試行の共通処理",
+        branches: [
+          { condition: "待機", action: null, targetStateId: null },
+          { condition: "復旧", action: "復旧を記録", targetStateId: "Y" },
+        ],
+      },
+      { ...plain("A", "X"), action: "Aの開始" },
+      { ...plain("B", "Y"), action: null },
+      { ...plain("A", "Y", "STOP"), action: "Aの停止" },
+      { ...plain("U", null, "STOP"), action: "Uの停止" },
+      { ...plain("B", null, "CHECK"), action: null },
+      { ...plain("A", "X", "RESET"), action: "Aの初期化" },
+    ],
+  };
+  await start(page);
+  for (const [index, current] of [
+    next,
+    { ...next, stateGroups: [] },
+  ].entries()) {
+    await show(page, current, index + 1);
+    await expect(frame(page)).toHaveCount(index === 0 ? 1 : 0);
+    await assertTables(page, next);
+    await expect(table(page).locator("thead th")).toHaveText([
+      "系統",
+      "区分",
+      "種別",
+      "イベント",
+      "状態A",
+      "状態U",
+      "状態B",
+      "状態C",
+      "状態X",
+      "状態Y",
+    ]);
+    const rows = table(page).locator("tbody tr");
+    expect(
+      await rows.evaluateAll((rows) =>
+        rows.map((row) =>
+          Array.from(
+            row.querySelectorAll(
+              ":scope > .event-category, :scope > td:not([headers])",
+            ),
+          ).map((cell) => ({
+            text: cell.textContent,
+            rowSpan: (cell as HTMLTableCellElement).rowSpan,
+            colSpan: (cell as HTMLTableCellElement).colSpan,
+          })),
+        ),
+      ),
+    ).toEqual([
+      [{ text: "", rowSpan: 1, colSpan: 3 }],
+      [
+        { text: "操作", rowSpan: 3, colSpan: 1 },
+        { text: "運転", rowSpan: 2, colSpan: 1 },
+        { text: "開始系", rowSpan: 1, colSpan: 1 },
+      ],
+      [{ text: "停止系", rowSpan: 1, colSpan: 1 }],
+      [
+        { text: "保守", rowSpan: 1, colSpan: 1 },
+        { text: "", rowSpan: 1, colSpan: 1 },
+      ],
+      [
+        { text: "通信", rowSpan: 1, colSpan: 1 },
+        { text: "", rowSpan: 1, colSpan: 2 },
+      ],
+    ]);
+    for (const row of await rows.all())
+      await expect(row.locator("td[headers]")).toHaveCount(next.states.length);
+  }
 });
 test("REQ-031-S03 同じ1メンバーの重複では集約しない", async ({ page }) => {
   await start(page);
