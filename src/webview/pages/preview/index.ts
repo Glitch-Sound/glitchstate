@@ -3,3 +3,4 @@
 export { diagramViewportStore } from "./model/diagram-viewport";
 export { stateSelectionStore } from "./model/state-selection";
 export { Preview } from "./ui/Preview";
+export { rasterizeStateDiagram } from "./ui/rasterize-state-diagram";

@@ -375,6 +375,7 @@ test("REQ-038-S01 REQ-038-S02 操作の順序と実際の倍率、中心、内�
     "-",
     "Reset",
     "+",
+    "⇩",
   ]);
   for (const name of ["縮小", "等倍", "拡大"])
     await expect(control(page, name)).toHaveCount(1);
@@ -531,6 +532,19 @@ for (const light of [false, true])
       light ? "rgb(0, 96, 192)" : "rgb(14, 99, 156)",
     );
     await expect(control(page, "縮小")).toHaveCSS(
+      "outline-color",
+      "rgb(0, 127, 212)",
+    );
+    await expect(control(page, "図をエクスポート")).toHaveCSS(
+      "color",
+      "rgb(255, 255, 255)",
+    );
+    await expect(control(page, "図をエクスポート")).toHaveCSS(
+      "background-color",
+      light ? "rgb(0, 96, 192)" : "rgb(14, 99, 156)",
+    );
+    await control(page, "図をエクスポート").focus();
+    await expect(control(page, "図をエクスポート")).toHaveCSS(
       "outline-color",
       "rgb(0, 127, 212)",
     );

@@ -44,6 +44,13 @@ const host = vi.hoisted(() => {
   const diagnostics = new Map<string, unknown[]>();
   const api = {
     window: {
+      showQuickPick: vi.fn(async (_items: unknown, _options: unknown) => ({
+        format: "svg",
+      })),
+      showSaveDialog: vi.fn(async (_options: unknown) => ({
+        toString: (): string => "file:///output.svg",
+      })),
+      showErrorMessage: vi.fn(async (_message: string) => undefined),
       activeTextEditor: undefined as
         | undefined
         | { document: ReturnType<typeof doc> },
@@ -60,6 +67,7 @@ const host = vi.hoisted(() => {
       },
     },
     workspace: {
+      fs: { writeFile: vi.fn(async (_uri: unknown, _bytes: Uint8Array) => {}) },
       onDidChangeTextDocument: changed.event,
       onDidCloseTextDocument: closed.event,
     },
@@ -73,6 +81,7 @@ const host = vi.hoisted(() => {
       }),
     },
     Uri: {
+      parse: (value: string) => ({ toString: () => value }),
       joinPath: (_base: unknown, ...parts: string[]) => ({
         fsPath: parts.join("/"),
         toString: () => parts.join("/"),
@@ -139,6 +148,10 @@ const host = vi.hoisted(() => {
       diagnostics.clear();
       api.window.createWebviewPanel.mockClear();
       api.window.activeTextEditor = undefined;
+      api.window.showQuickPick.mockClear();
+      api.window.showSaveDialog.mockClear();
+      api.window.showErrorMessage.mockClear();
+      api.workspace.fs.writeFile.mockClear();
     },
   };
 });
@@ -166,6 +179,89 @@ async function open(document = host.doc()) {
   host.panels[0]?.incoming.emit({ type: "glitchstate.ready" });
   return host.panels[0];
 }
+
+test("REQ-042-S05 PNG生成に必要なローカル画像だけをCSPで許可する", async () => {
+  const panel = await open();
+  expect(panel.webview.html).toContain("img-src blob:");
+  expect(panel.webview.html).toContain("default-src 'none'");
+  expect(panel.webview.html).not.toMatch(/img-src[^;"]*(?:https?:|\*)/);
+});
+test("REQ-043-S06 エラー保持中の未保存本文と診断を画像保存で変更しない接続", async () => {
+  const document = host.doc();
+  const panel = await open(document);
+  document.version = 2;
+  document.text =
+    'State IDLE as "未保存の状態" color "#4F46E5":\n    変更した意味';
+  host.changed.emit({ document });
+  document.version = 3;
+  document.text = 'State IDLE as "不正" color "bad":\n    エラー';
+  host.changed.emit({ document });
+  const update = panel.webview.postMessage.mock.calls.at(-1)?.[0] as {
+    uri: string;
+    version: number;
+    sequence: number;
+    model: unknown;
+    hasErrors: boolean;
+  };
+  expect(update.hasErrors).toBe(true);
+  expect(update.model).toEqual({
+    states: [
+      {
+        id: "IDLE",
+        name: "未保存の状態",
+        color: "#4F46E5",
+        meaning: "変更した意味",
+      },
+    ],
+    events: [],
+    transitions: [],
+  });
+  panel.incoming.emit({
+    type: "glitchstate.rendered",
+    uri: update.uri,
+    version: update.version,
+    sequence: update.sequence,
+  });
+  const diagnostics = structuredClone(host.diagnostics.get(update.uri));
+  const text = document.text;
+  panel.incoming.emit({
+    type: "glitchstate.export-start",
+    requestId: "save-1",
+    uri: update.uri,
+    version: update.version,
+    sequence: update.sequence,
+  });
+  await expect
+    .poll(() =>
+      panel.webview.postMessage.mock.calls.some(
+        ([m]) => (m as { type: string }).type === "glitchstate.export",
+      ),
+    )
+    .toBe(true);
+  const request = panel.webview.postMessage.mock.calls
+    .map(([m]) => m)
+    .find(
+      (m) => (m as { type: string }).type === "glitchstate.export",
+    ) as object;
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text>未保存の状態</text></svg>';
+  panel.incoming.emit({
+    ...request,
+    type: "glitchstate.export-result",
+    success: true,
+    data: svg,
+  });
+  await expect
+    .poll(() => host.api.workspace.fs.writeFile.mock.calls.length)
+    .toBe(1);
+  expect(host.api.workspace.fs.writeFile.mock.calls[0][1]).toEqual(
+    Buffer.from(svg),
+  );
+  expect(host.diagnostics.get(update.uri)).toEqual(diagnostics);
+  expect(document.text).toBe(text);
+  expect(document.version).toBe(3);
+  expect(host.api.window.showErrorMessage).not.toHaveBeenCalled();
+});
 
 test("REQ-003-S01 未保存の文書本文をプレビューへ渡す", async () => {
   const panel = await open();

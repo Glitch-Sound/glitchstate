@@ -13,6 +13,9 @@ interface PreviewProps {
   model: GlsModel | null;
   hasErrors: boolean;
   onRenderReady?: () => void;
+  onImageReady?: (capture: (() => string) | null) => void;
+  onExport?: () => void;
+  exportBusy?: boolean;
 }
 
 /** 状態定義の内容と現在の解析状況を表示する。
@@ -117,6 +120,9 @@ export function Preview(props: PreviewProps): ReactElement {
             generation={generation}
             selectedStateId={selectedStateId}
             onRenderReady={onRenderReady}
+            onImageReady={props.onImageReady}
+            onExport={props.onExport}
+            exportBusy={props.exportBusy}
           />
           <TransitionTable model={model} selectedStateId={selectedStateId} />
         </>

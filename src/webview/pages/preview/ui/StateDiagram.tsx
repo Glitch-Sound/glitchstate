@@ -16,6 +16,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { GlsModel } from "../../../../core";
@@ -33,6 +34,8 @@ import {
   getAbsoluteNodeRects,
   layoutStateGroups,
 } from "../model/layout-state-groups";
+import { serializeStateDiagram } from "../model/serialize-state-diagram";
+import { captureStateDiagram } from "./capture-state-diagram";
 import { DiagramControls } from "./DiagramControls";
 import { StateEdge } from "./StateEdge";
 import { StateGroup } from "./StateGroup";
@@ -49,13 +52,20 @@ function DiagramCanvas({
   generation,
   selectedStateId,
   onRenderReady,
+  onImageReady,
+  onExport,
+  exportBusy,
 }: {
   graph: ReturnType<typeof buildStateDiagram>;
   documentUri: string;
   generation: number;
   selectedStateId?: string | null;
   onRenderReady?: () => void;
+  onImageReady?: (capture: (() => string) | null) => void;
+  onExport?: () => void;
+  exportBusy?: boolean;
 }) {
+  const canvas = useRef<HTMLDivElement>(null);
   const markerId = useId();
   const flow = useReactFlow();
   const initialized = useNodesInitialized({ includeHiddenNodes: true });
@@ -226,6 +236,17 @@ function DiagramCanvas({
     [nodes, selectedStateId],
   );
   const ready = initialized && labelsReady && readyKey === viewKey;
+  useEffect(() => {
+    onImageReady?.(
+      ready
+        ? () => {
+            if (!canvas.current) throw new Error("図が表示されていない");
+            return serializeStateDiagram(captureStateDiagram(canvas.current));
+          }
+        : null,
+    );
+    return () => onImageReady?.(null);
+  }, [ready, onImageReady]);
   const changeZoom = (requested: number) => {
     if (!ready) return;
     const current = diagramViewportStore.getState();
@@ -243,11 +264,13 @@ function DiagramCanvas({
       <DiagramControls
         zoom={zoom}
         ready={ready}
+        exportBusy={exportBusy}
+        onExport={onExport}
         onZoomOut={() => changeZoom(flow.getZoom() - c.zoomStep)}
         onReset={() => changeZoom(1)}
         onZoomIn={() => changeZoom(flow.getZoom() + c.zoomStep)}
       />
-      <div className="state-diagram-canvas">
+      <div ref={canvas} className="state-diagram-canvas">
         <ReactFlow
           defaultViewport={initialViewport}
           onMove={(_, viewport) => {
@@ -302,6 +325,9 @@ export function StateDiagram(props: {
   generation: number;
   selectedStateId?: string | null;
   onRenderReady?: () => void;
+  onImageReady?: (capture: (() => string) | null) => void;
+  onExport?: () => void;
+  exportBusy?: boolean;
 }): ReactElement {
   const { model, documentUri, generation, selectedStateId, onRenderReady } =
     props;
@@ -329,6 +355,9 @@ export function StateDiagram(props: {
             generation={generation}
             selectedStateId={selectedStateId}
             onRenderReady={onRenderReady}
+            onImageReady={props.onImageReady}
+            onExport={props.onExport}
+            exportBusy={props.exportBusy}
           />
         </ReactFlowProvider>
       )}

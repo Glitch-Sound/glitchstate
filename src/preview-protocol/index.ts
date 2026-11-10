@@ -1,6 +1,16 @@
 /** ExtensionとWebviewの間で使う通知と受信値の検証を定義する。 */
 import { z } from "zod";
 import type { GlsModel } from "../core";
+import { exportResult, exportStart } from "./image-export";
+
+export type {
+  ExportFormat,
+  ExportMessage,
+  ExportRequest,
+  ExportResult,
+  ExportStart,
+} from "./image-export";
+export { readExportMessage } from "./image-export";
 
 export interface PreviewUpdate {
   readonly type: "glitchstate.update";
@@ -144,10 +154,11 @@ const update = z.strictObject({
   model: model.nullable(),
   hasErrors: z.boolean(),
 });
-const incoming = z.discriminatedUnion("type", [
+const previewIncoming = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("glitchstate.ready") }),
   z.strictObject({ type: z.literal("glitchstate.rendered"), ...identity }),
 ]);
+const incoming = z.union([previewIncoming, exportStart, exportResult]);
 export type WebviewMessage = z.infer<typeof incoming>;
 
 /** 受信値が描画できる共通モデルの通知であるか確かめる。
@@ -160,7 +171,7 @@ export function isPreviewUpdate(value: unknown): value is PreviewUpdate {
 
 /** Webviewからの通知を検証する。
  * @param value メッセージAPIから受け取った未検証の値。
- * @returns 準備完了または描画完了の通知。不正な値ならnull。
+ * @returns 準備完了、描画完了、画像保存の起動または生成結果。不正な値ならnull。
  */
 export function readWebviewMessage(value: unknown): WebviewMessage | null {
   const result = incoming.safeParse(value);

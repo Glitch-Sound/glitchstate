@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import * as vscode from "vscode";
 import { type PreviewUpdate, readWebviewMessage } from "../preview-protocol";
+import { createDiagramExport } from "./diagram-export";
 
 function webviewHtml(
   webview: vscode.Webview,
@@ -19,6 +20,7 @@ function webviewHtml(
     `default-src 'none'`,
     `style-src ${webview.cspSource}`,
     `script-src ${webview.cspSource}`,
+    `img-src blob:`,
   ].join("; ");
   return html
     .replaceAll("./assets/", `${assetRoot.toString()}/`)
@@ -36,14 +38,51 @@ export function createPreviewPanel(context: vscode.ExtensionContext) {
   let panel: vscode.WebviewPanel | undefined;
   let current: PreviewUpdate | undefined;
   let ready = false;
+  let displayed: PreviewUpdate | undefined;
   let listeners: vscode.Disposable[] = [];
   const rendered = new vscode.EventEmitter<PreviewUpdate>();
+  const exporter = createDiagramExport({
+    current: () => (panel ? current : undefined),
+    pickFormat: async (items) =>
+      (
+        await vscode.window.showQuickPick(items, {
+          placeHolder: "エクスポート形式を選択",
+        })
+      )?.format,
+    pickDestination: async (options) =>
+      (
+        await vscode.window.showSaveDialog({
+          ...options,
+          defaultUri: vscode.Uri.parse(options.defaultUri),
+        })
+      )?.toString(),
+    send: async (message) =>
+      panel ? panel.webview.postMessage(message) : false,
+    write: async (uri, bytes) =>
+      vscode.workspace.fs.writeFile(vscode.Uri.parse(uri), bytes),
+    notify: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+  });
+  const accept = (data: PreviewUpdate) => {
+    const changed =
+      current?.uri !== data.uri ||
+      current?.sequence !== data.sequence ||
+      current?.version !== data.version;
+    current = data;
+    if (changed) {
+      displayed = undefined;
+      exporter.cancel();
+    }
+  };
   const send = () => {
     if (ready && current && panel) void panel.webview.postMessage(current);
   };
   const close = () => {
     ready = false;
     current = undefined;
+    displayed = undefined;
+    exporter.cancel();
     panel = undefined;
     for (const listener of listeners) listener.dispose();
     listeners = [];
@@ -52,7 +91,7 @@ export function createPreviewPanel(context: vscode.ExtensionContext) {
     onDidRenderPreview: rendered.event,
     currentPreviewUri: () => current?.uri,
     show(data: PreviewUpdate) {
-      current = data;
+      accept(data);
       if (panel) {
         panel.reveal(vscode.ViewColumn.Beside);
         send();
@@ -72,18 +111,36 @@ export function createPreviewPanel(context: vscode.ExtensionContext) {
       panel = created;
       listeners.push(
         created.webview.onDidReceiveMessage((value: unknown) => {
+          exporter.receive(value);
           const message = readWebviewMessage(value);
           if (!message) return;
           if (message.type === "glitchstate.ready") {
             ready = true;
             send();
+          } else if (message.type === "glitchstate.export-start") {
+            if (
+              displayed &&
+              current?.model?.states.length &&
+              message.uri === displayed.uri &&
+              message.sequence === displayed.sequence &&
+              message.version === displayed.version
+            )
+              void exporter.start(message);
+            else
+              void created.webview.postMessage({
+                ...message,
+                type: "glitchstate.export-finished",
+              });
           } else if (
+            message.type === "glitchstate.rendered" &&
             current &&
             message.uri === current.uri &&
             message.version === current.version &&
             message.sequence === current.sequence
-          )
+          ) {
+            displayed = current;
             rendered.fire(current);
+          }
         }),
         created.onDidDispose(close),
         created.onDidChangeViewState(() => {
@@ -100,7 +157,7 @@ export function createPreviewPanel(context: vscode.ExtensionContext) {
         data.sequence <= current.sequence
       )
         return;
-      current = data;
+      accept(data);
       send();
     },
     dispose() {

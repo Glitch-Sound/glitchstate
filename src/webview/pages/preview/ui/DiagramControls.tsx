@@ -1,8 +1,8 @@
-/** 図の倍率操作と現在の倍率を表示する。 */
+/** 図の倍率と保存の操作、現在の倍率を表示する。 */
 import type { ReactElement } from "react";
 
-/** 縮小、等倍、拡大の操作対象を表示する。
- * @param props 現在の倍率、準備状態と倍率操作の通知先。
+/** 縮小、等倍、拡大と画像保存の操作対象を表示する。
+ * @param props 現在の倍率、準備と保存処理の状態、倍率と保存操作の通知先。
  * @returns 図のキャンバスの外に置く操作部。
  */
 export function DiagramControls(props: {
@@ -11,6 +11,8 @@ export function DiagramControls(props: {
   onZoomOut: () => void;
   onReset: () => void;
   onZoomIn: () => void;
+  exportBusy?: boolean;
+  onExport?: () => void;
 }): ReactElement {
   return (
     <fieldset className="diagram-controls" aria-label="図の表示操作">
@@ -37,6 +39,15 @@ export function DiagramControls(props: {
         onClick={props.onZoomIn}
       >
         +
+      </button>
+      <button
+        type="button"
+        aria-label="図をエクスポート"
+        title="図をエクスポート"
+        disabled={!props.ready || props.exportBusy}
+        onClick={props.onExport}
+      >
+        ⇩
       </button>
       <output role="note" aria-label="表示倍率">
         {Math.round(props.zoom * 100)}%

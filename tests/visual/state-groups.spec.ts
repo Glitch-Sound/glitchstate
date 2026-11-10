@@ -418,6 +418,7 @@ test("REQ-030-S03 長い名前と実ループを枠に収め画面から欠落�
     "-",
     "Reset",
     "+",
+    "⇩",
   ]);
   for (const name of ["縮小", "等倍", "拡大"])
     await expect(
