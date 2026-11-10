@@ -19,6 +19,105 @@ const notification = (model: unknown) => ({
   hasErrors: model === null,
 });
 
+const groupStates = [
+  state,
+  { ...state, id: "B" },
+  { ...state, id: "C" },
+  { ...state, id: "D" },
+];
+const stateGroup = { id: "IDLE", name: "稼働系", stateIds: ["IDLE", "B"] };
+const groupedModel = {
+  ...model,
+  states: groupStates,
+  stateGroups: [stateGroup],
+};
+for (const value of [
+  groupedModel,
+  { ...model, stateGroups: [] },
+  {
+    ...groupedModel,
+    stateGroups: [
+      stateGroup,
+      { id: "idle", name: "稼働系", stateIds: ["C", "D"] },
+    ],
+  },
+  {
+    ...groupedModel,
+    eventCategoryHeaders: ["系統"],
+    events: [
+      { ...event, categoryPath: ["操作"] },
+      { id: "RETRY", name: "再試行" },
+    ],
+    transitions: [
+      transition,
+      {
+        fromStateId: "B",
+        eventId: "RETRY",
+        commonAction: null,
+        branches: [{ condition: "確認", action: null, targetStateId: "IDLE" }],
+      },
+    ],
+  },
+]) {
+  test(`REQ-028-S01 REQ-028-S03 REQ-028-S04 グループ付きと空一覧の通知を受理する: ${JSON.stringify(value)}`, () => {
+    expect(isPreviewUpdate(notification(value))).toBe(true);
+  });
+}
+const invalidGroups: unknown[] = [
+  null,
+  {},
+  1,
+  ...[undefined, "", "1BAD", 1].map((id) => [{ ...stateGroup, id }]),
+  ...[undefined, "", " ", 1, 'A"B', "A\nB", "A\rB"].map((name) => [
+    { ...stateGroup, name },
+  ]),
+  ...[
+    undefined,
+    null,
+    {},
+    [],
+    ["IDLE"],
+    ["IDLE", 1],
+    ["IDLE", "1BAD"],
+    ["IDLE", "MISSING"],
+    ["IDLE", "IDLE"],
+  ].map((stateIds) => [{ ...stateGroup, stateIds }]),
+  [{ ...stateGroup, children: [] }],
+  [{ ...stateGroup, states: [] }],
+  [{ ...stateGroup, transitions: [] }],
+  [stateGroup, { id: "IDLE", name: "別", stateIds: ["C", "D"] }],
+  [stateGroup, { id: "H", name: "別", stateIds: ["C", "B"] }],
+];
+for (const stateGroups of invalidGroups) {
+  test(`REQ-033-S03 対象だけが不正なグループ通知を拒否する: ${JSON.stringify(stateGroups)}`, () => {
+    expect(
+      isPreviewUpdate(notification({ ...groupedModel, stateGroups })),
+    ).toBe(false);
+  });
+}
+test("REQ-029-S02 REQ-029-S04 グループIDを状態参照へ拡張しない", () => {
+  const next = { ...groupedModel, stateGroups: [{ ...stateGroup, id: "G" }] };
+  expect(
+    isPreviewUpdate(
+      notification({
+        ...next,
+        transitions: [{ ...transition, targetStateId: "G" }],
+      }),
+    ),
+  ).toBe(false);
+  expect(
+    isPreviewUpdate(
+      notification({
+        ...next,
+        stateGroups: [
+          next.stateGroups[0],
+          { id: "H", name: "別", stateIds: ["C", "G"] },
+        ],
+      }),
+    ),
+  ).toBe(false);
+});
+
 const conditional = {
   fromStateId: "IDLE",
   eventId: "START",

@@ -7,6 +7,7 @@ export type {
   ParseResult,
   PlainTransitionDefinition,
   StateDefinition,
+  StateGroupDefinition,
   TransitionBranch,
   TransitionDefinition,
 } from "./model/gls-model";

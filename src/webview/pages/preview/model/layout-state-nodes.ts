@@ -1,5 +1,5 @@
 /** 定義順と実測した高さから状態ノードを配置する。 */
-import type { StateDiagramNode } from "./build-state-diagram";
+import type { DiagramNode } from "./build-state-diagram";
 import { DIAGRAM_CONFIG as c } from "./diagram-config";
 
 /** 各行の最大高さを確保してノードを折り返す。
@@ -7,11 +7,11 @@ import { DIAGRAM_CONFIG as c } from "./diagram-config";
  * @param heights ノードIDごとの実測の高さ。未計測なら最小高さを使う。
  * @returns 図の座標と固定幅を付けたノード。
  */
-export function layoutStateNodes(
-  nodes: readonly StateDiagramNode[],
+export function layoutStateNodes<T extends DiagramNode>(
+  nodes: readonly T[],
   heights: ReadonlyMap<string, number> = new Map(),
-): StateDiagramNode[] {
-  const result: StateDiagramNode[] = [];
+): T[] {
+  const result: T[] = [];
   let y: number = c.margin;
   for (let row = 0; row < nodes.length; row += c.columns) {
     const items = nodes.slice(row, row + c.columns);

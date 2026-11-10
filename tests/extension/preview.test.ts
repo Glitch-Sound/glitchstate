@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { GlsModel } from "../../src/core";
 
 const host = vi.hoisted(() => {
   function channel() {
@@ -1580,3 +1581,229 @@ for (const command of [false, true]) {
     );
   });
 }
+
+const groupPreviewModel: GlsModel = {
+  states: ["A", "B", "C", "X", "Y"].map((id) => ({
+    id,
+    name: `状態${id}`,
+    meaning: `意味${id}`,
+    color: "#4F46E5",
+  })),
+  events: [
+    { id: "START", name: "開始", categoryPath: ["操作", "運転"] },
+    { id: "RETRY", name: "再試行" },
+  ],
+  eventCategoryHeaders: ["系統", "区分", "種別"],
+  stateGroups: [{ id: "G", name: "稼働系", stateIds: ["C", "B", "A"] }],
+  transitions: [
+    { fromStateId: "A", eventId: "START", action: "処理A", targetStateId: "X" },
+    {
+      fromStateId: "B",
+      eventId: "RETRY",
+      commonAction: "共通B",
+      branches: [
+        { condition: "別", action: "別処理", targetStateId: "Y" },
+        { condition: "一致", action: null, targetStateId: "X" },
+      ],
+    },
+  ],
+};
+const repairedGroupPreviewModel: GlsModel = {
+  ...groupPreviewModel,
+  states: groupPreviewModel.states.map((s) =>
+    s.id === "A" ? { ...s, name: "再開待ち" } : s,
+  ),
+  events: [
+    { id: "START", name: "開始", categoryPath: ["業務", "復旧"] },
+    { id: "RETRY", name: "再試行" },
+  ],
+  eventCategoryHeaders: ["領域", "用途"],
+  stateGroups: [{ id: "G", name: "復旧系", stateIds: ["B", "C"] }],
+  transitions: [
+    {
+      fromStateId: "A",
+      eventId: "START",
+      action: "再開処理",
+      targetStateId: "Y",
+    },
+    {
+      fromStateId: "B",
+      eventId: "RETRY",
+      commonAction: "復旧要求",
+      branches: [
+        { condition: "待つ", action: null, targetStateId: null },
+        { condition: "復旧可能", action: "復旧処理", targetStateId: "Y" },
+      ],
+    },
+    {
+      fromStateId: "C",
+      eventId: "RETRY",
+      action: "Cの復旧",
+      targetStateId: "Y",
+    },
+  ],
+};
+function groupPreviewSource(value: GlsModel): string {
+  const action = (text: string | null, indent: number) =>
+    (text ?? "-").split("\n").map((line) => " ".repeat(indent) + line);
+  return [
+    ...value.states.flatMap((s) => [
+      `State ${s.id} as "${s.name}" color "${s.color}":`,
+      ...action(s.meaning, 4),
+    ]),
+    ...(value.eventCategoryHeaders
+      ? [
+          `EventCategoryHeaders ${value.eventCategoryHeaders.map((n) => `"${n}"`).join(" > ")}`,
+        ]
+      : []),
+    ...value.events.map(
+      (e) =>
+        `Event ${e.id} as "${e.name}"${e.categoryPath ? ` in ${e.categoryPath.map((n) => `"${n}"`).join(" > ")}` : ""}`,
+    ),
+    ...value.transitions.flatMap((t) =>
+      "branches" in t
+        ? [
+            `Transition ${t.fromStateId} on ${t.eventId}:`,
+            "    Common:",
+            ...action(t.commonAction, 8),
+            ...t.branches.flatMap((b) => [
+              `    Branch "${b.condition}" -> ${b.targetStateId ?? "-"}:`,
+              ...action(b.action, 8),
+            ]),
+          ]
+        : [
+            `Transition ${t.fromStateId} on ${t.eventId} -> ${t.targetStateId ?? "-"}:`,
+            ...action(t.action, 4),
+          ],
+    ),
+    ...(value.stateGroups ?? []).flatMap((g) => [
+      `StateGroup ${g.id} as "${g.name}":`,
+      ...g.stateIds.map((id) => `    ${id}`),
+    ]),
+  ].join("\n");
+}
+test("REQ-033-S01 グループの編集を現在の個別モデルのまま通知する", async () => {
+  const doc = host.doc();
+  doc.text = groupPreviewSource(groupPreviewModel);
+  const panel = await open(doc);
+  const { stateGroups: _, ...legacy } = groupPreviewModel;
+  const cases: GlsModel[] = [
+    legacy,
+    groupPreviewModel,
+    {
+      ...groupPreviewModel,
+      stateGroups: [{ id: "G", name: "改名", stateIds: ["A", "B", "C"] }],
+    },
+    {
+      ...groupPreviewModel,
+      stateGroups: [
+        { id: "G", name: "稼働系", stateIds: ["A", "C"] },
+        { id: "H", name: "別", stateIds: ["B", "Y"] },
+      ],
+    },
+    {
+      ...groupPreviewModel,
+      transitions: [
+        groupPreviewModel.transitions[0],
+        {
+          fromStateId: "B",
+          eventId: "RETRY",
+          action: "別",
+          targetStateId: null,
+        },
+      ],
+    },
+    repairedGroupPreviewModel,
+  ];
+  for (const expected of cases) {
+    doc.text = groupPreviewSource(expected);
+    doc.version++;
+    host.changed.emit({ document: doc });
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model: expected, hasErrors: false }),
+    );
+  }
+});
+test("REQ-033-S02 正常、所属行の参照エラーで保持、異なる全内容へ回復する", async () => {
+  const doc = host.doc();
+  doc.text = groupPreviewSource(groupPreviewModel);
+  const panel = await open(doc);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: groupPreviewModel, hasErrors: false }),
+  );
+  doc.text = doc.text.replace(
+    "    C\n    B\n    A",
+    "    C\n    MISSING\n    A",
+  );
+  doc.version++;
+  host.changed.emit({ document: doc });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ model: groupPreviewModel, hasErrors: true }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([
+    expect.objectContaining({
+      code: "reference",
+      message: "所属状態ID MISSING は未宣言",
+      range: expect.objectContaining({ start: { line: 24, character: 0 } }),
+    }),
+  ]);
+  doc.text = groupPreviewSource(repairedGroupPreviewModel);
+  doc.version++;
+  host.changed.emit({ document: doc });
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      model: repairedGroupPreviewModel,
+      hasErrors: false,
+    }),
+  );
+  expect(host.diagnostics.get("file:///a.gls")).toEqual([]);
+});
+for (const command of [false, true]) {
+  test(`REQ-033-S04 小さい版番号の再オープンでグループを更新する: command=${command}`, async () => {
+    const old = host.doc();
+    old.text = groupPreviewSource(groupPreviewModel);
+    old.version = 9;
+    const panel = await open(old);
+    old.isClosed = true;
+    host.closed.emit(old);
+    const doc = host.doc();
+    doc.text = groupPreviewSource(repairedGroupPreviewModel);
+    if (command) await open(doc);
+    else {
+      doc.version++;
+      host.changed.emit({ document: doc });
+    }
+    expect(doc.version).toBeLessThan(old.version);
+    expect(host.panels).toHaveLength(1);
+    expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        model: repairedGroupPreviewModel,
+        sequence: 2,
+        hasErrors: false,
+      }),
+    );
+  });
+}
+test("REQ-033-S05 別文書の所属エラーを混ぜず初回エラーで正常モデルを使わない", async () => {
+  const a = host.doc();
+  a.text = groupPreviewSource(groupPreviewModel);
+  const panel = await open(a);
+  const count = panel.webview.postMessage.mock.calls.length;
+  const b = host.doc("b.gls");
+  b.text = groupPreviewSource(groupPreviewModel).replace(
+    "    C\n    B\n    A",
+    "    C\n    MISSING\n    A",
+  );
+  host.changed.emit({ document: b });
+  expect(panel.webview.postMessage.mock.calls).toHaveLength(count);
+  expect(host.diagnostics.has("file:///b.gls")).toBe(false);
+  await open(b);
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      uri: "file:///b.gls",
+      model: null,
+      hasErrors: true,
+    }),
+  );
+  expect(host.panels).toHaveLength(1);
+});

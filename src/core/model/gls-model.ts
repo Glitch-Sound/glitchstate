@@ -11,6 +11,13 @@ export interface GlsModel {
   readonly events: readonly EventDefinition[];
   readonly transitions: readonly TransitionDefinition[];
   readonly eventCategoryHeaders?: readonly string[];
+  readonly stateGroups?: readonly StateGroupDefinition[];
+}
+
+export interface StateGroupDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly stateIds: readonly string[];
 }
 
 export interface EventDefinition {

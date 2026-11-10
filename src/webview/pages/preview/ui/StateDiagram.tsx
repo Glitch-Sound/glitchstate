@@ -1,68 +1,37 @@
 /** 共通モデルの状態と状態間の関係をReact Flowで表示する。 */
 import {
-  type Edge,
   getNodesBounds,
   getViewportForBounds,
-  Position,
   ReactFlow,
   ReactFlowProvider,
   useNodesInitialized,
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { type ReactElement, useEffect, useId, useMemo, useState } from "react";
-import type { GlsModel } from "../../../../core";
 import {
-  buildStateDiagram,
-  type StateDiagramNode,
-} from "../model/build-state-diagram";
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
+import type { GlsModel } from "../../../../core";
+import { buildStateDiagram } from "../model/build-state-diagram";
+import { connectDiagramEdges } from "../model/connect-diagram-edges";
 import { DIAGRAM_CONFIG as c } from "../model/diagram-config";
-import { layoutStateNodes } from "../model/layout-state-nodes";
+import {
+  getAbsoluteNodeRects,
+  layoutStateGroups,
+} from "../model/layout-state-groups";
 import { StateEdge } from "./StateEdge";
+import { StateGroup } from "./StateGroup";
 import { StateNode } from "./StateNode";
 import "@xyflow/react/dist/style.css";
 import "./diagram.css";
 
-const nodeTypes = { state: StateNode };
+const nodeTypes = { state: StateNode, stateGroup: StateGroup };
 const edgeTypes = { state: StateEdge };
-
-function connectEdges(
-  nodes: StateDiagramNode[],
-  edges: Edge[],
-  markerId: string,
-): Edge[] {
-  const positions = new Map(nodes.map((node) => [node.id, node.position]));
-  const pairs = new Set(edges.map((edge) => edge.id));
-  return edges.map((edge) => {
-    const source = positions.get(edge.source);
-    const target = positions.get(edge.target);
-    if (!source || !target) throw new Error("図の遷移に対応する状態がない");
-    const dx = target.x - source.x;
-    const dy = target.y - source.y;
-    const side =
-      Math.abs(dx) >= Math.abs(dy)
-        ? dx >= 0
-          ? Position.Right
-          : Position.Left
-        : dy >= 0
-          ? Position.Bottom
-          : Position.Top;
-    const opposite = {
-      left: Position.Right,
-      right: Position.Left,
-      top: Position.Bottom,
-      bottom: Position.Top,
-    }[side];
-    const loop = edge.source === edge.target;
-    return {
-      ...edge,
-      sourceHandle: loop ? "loop-out" : `${side}-out`,
-      targetHandle: loop ? "loop-in" : `${opposite}-in`,
-      markerEnd: markerId,
-      data: { reciprocal: !loop && pairs.has(`${edge.target}:${edge.source}`) },
-    };
-  });
-}
 
 function DiagramCanvas({
   graph,
@@ -91,21 +60,63 @@ function DiagramCanvas({
       ),
     [graph.nodes, heightKey],
   );
+  const [labels, setLabels] = useState<ReadonlyMap<string, number>>(new Map());
+  const onLabelMeasured = useCallback((id: string, value: number) => {
+    setLabels((previous) =>
+      previous.get(id) === value ? previous : new Map(previous).set(id, value),
+    );
+  }, []);
   const nodes = useMemo(
-    () => layoutStateNodes(graph.nodes, heights),
-    [graph.nodes, heights],
+    () =>
+      layoutStateGroups(graph.nodes, heights, labels).map((node) =>
+        node.type === "stateGroup"
+          ? { ...node, zIndex: 0, data: { ...node.data, onLabelMeasured } }
+          : node.parentId
+            ? { ...node, zIndex: 1 }
+            : node,
+      ),
+    [graph.nodes, heights, labels, onLabelMeasured],
   );
+  const labelsReady = graph.nodes
+    .filter((node) => node.type === "stateGroup")
+    .every((node) => (labels.get(node.id) ?? 0) > 0);
   const layoutKey = JSON.stringify(
-    nodes.map((node) => [node.id, node.position, heights.get(node.id)]),
+    nodes.map((node) => [
+      node.id,
+      node.position,
+      node.width,
+      node.height,
+      node.type === "state" ? heights.get(node.id) : labels.get(node.id),
+    ]),
   );
   const viewKey = `${layoutKey}:${width}:${height}`;
   const [readyKey, setReadyKey] = useState<string>();
   useEffect(() => {
-    if (!initialized || !width || !height || !flow.viewportInitialized) return;
+    if (
+      !initialized ||
+      !labelsReady ||
+      !width ||
+      !height ||
+      !flow.viewportInitialized
+    )
+      return;
     let cancelled = false;
     let committedFrame: number | undefined;
     const frame = requestAnimationFrame(() => {
-      const bounds = getNodesBounds(flow.getNodes());
+      const grouped = nodes.some((node) => node.type === "stateGroup");
+      const boxes = grouped ? [...getAbsoluteNodeRects(nodes).values()] : [];
+      const bounds = grouped
+        ? {
+            x: Math.min(...boxes.map((box) => box.x)),
+            y: Math.min(...boxes.map((box) => box.y)),
+            width:
+              Math.max(...boxes.map((box) => box.x + box.width)) -
+              Math.min(...boxes.map((box) => box.x)),
+            height:
+              Math.max(...boxes.map((box) => box.y + box.height)) -
+              Math.min(...boxes.map((box) => box.y)),
+          }
+        : getNodesBounds(flow.getNodes());
       const padding = c.margin + c.loopExtent * 2;
       const expanded = {
         x: bounds.x - padding,
@@ -136,14 +147,14 @@ function DiagramCanvas({
       cancelAnimationFrame(frame);
       if (committedFrame !== undefined) cancelAnimationFrame(committedFrame);
     };
-  }, [initialized, width, height, viewKey, flow]);
+  }, [initialized, labelsReady, width, height, viewKey, flow, nodes]);
   useEffect(() => {
-    if (!initialized || readyKey !== viewKey) return;
+    if (!initialized || !labelsReady || readyKey !== viewKey) return;
     const frame = requestAnimationFrame(() => onRenderReady?.());
     return () => cancelAnimationFrame(frame);
-  }, [initialized, readyKey, viewKey, onRenderReady]);
+  }, [initialized, labelsReady, readyKey, viewKey, onRenderReady]);
   const edges = useMemo(
-    () => connectEdges(nodes, graph.edges, markerId),
+    () => connectDiagramEdges(nodes, graph.edges, markerId),
     [nodes, graph.edges, markerId],
   );
   return (
@@ -197,7 +208,7 @@ export function StateDiagram(props: {
   }, [model, onRenderReady]);
   const graph = useMemo(() => buildStateDiagram(model), [model]);
   const identity = JSON.stringify([
-    graph.nodes.map((n) => [n.id, n.data]),
+    graph.nodes.map((n) => [n.id, n.parentId, n.data]),
     graph.edges.map((e) => e.id),
   ]);
   return (

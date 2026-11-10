@@ -10,6 +10,10 @@ import {
   validateEvents,
 } from "../validator/validate-events";
 import {
+  type StateGroupCandidate,
+  validateStateGroups,
+} from "../validator/validate-state-groups";
+import {
   type StateCandidate,
   validateStates,
 } from "../validator/validate-states";
@@ -41,6 +45,13 @@ function readQuotedNames(
 }
 type Block =
   | {
+      kind: "group";
+      id: string;
+      name: string;
+      line: number;
+      body: BodyLine[];
+    }
+  | {
       kind: "state";
       id: string;
       name: string;
@@ -70,13 +81,24 @@ export function parseGls(source: string): ParseResult {
   const events: EventCandidate[] = [];
   const headers: EventCategoryHeadersCandidate[] = [];
   const transitions: TransitionCandidate[] = [];
+  const groups: StateGroupCandidate[] = [];
   const diagnostics: GlsDiagnostic[] = [];
   let current: Block | undefined;
   let afterEvent = false;
   const finish = () => {
     if (!current) return;
     const text = current.body.map((item) => item.text).join("\n");
-    if (current.kind === "state") {
+    if (current.kind === "group") {
+      groups.push({
+        line: current.line,
+        members: current.body,
+        group: {
+          id: current.id,
+          name: current.name,
+          stateIds: current.body.map((item) => item.text.replace(/ +$/, "")),
+        },
+      });
+    } else if (current.kind === "state") {
       states.push({
         line: current.line,
         state: {
@@ -136,7 +158,16 @@ export function parseGls(source: string): ParseResult {
     const transition =
       /^Transition +([^ ]+) +on +([^ ]+) +-> +([^ :]+): *$/.exec(line);
     const conditional = /^Transition +([^ ]+) +on +([^ :]+): *$/.exec(line);
-    if (state)
+    const group = /^StateGroup +([^ ]+) +as +"([^"\r\n]*)": *$/.exec(line);
+    if (group)
+      current = {
+        kind: "group",
+        id: group[1],
+        name: group[2],
+        line: lineNumber,
+        body: [],
+      };
+    else if (state)
       current = {
         kind: "state",
         id: state[1],
@@ -201,7 +232,7 @@ export function parseGls(source: string): ParseResult {
         body: [],
       };
     else {
-      const declaration = /^(State|Event|Transition)\b/.test(line);
+      const declaration = /^(State|StateGroup|Event|Transition)\b/.test(line);
       diagnostics.push({
         code: declaration ? "syntax" : "unsupported",
         line: lineNumber,
@@ -212,6 +243,12 @@ export function parseGls(source: string): ParseResult {
   finish();
   diagnostics.push(...validateStates(states));
   diagnostics.push(...validateEvents(events, headers));
+  diagnostics.push(
+    ...validateStateGroups(
+      groups,
+      states.map((item) => item.state),
+    ),
+  );
   diagnostics.push(
     ...validateTransitions(
       transitions,
@@ -227,6 +264,9 @@ export function parseGls(source: string): ParseResult {
           events: events.map((item) => item.event),
           transitions: transitions.map((item) => item.transition),
           ...(headers.length ? { eventCategoryHeaders: headers[0].names } : {}),
+          ...(groups.length
+            ? { stateGroups: groups.map((item) => item.group) }
+            : {}),
         },
     diagnostics,
   };

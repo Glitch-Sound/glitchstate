@@ -1,0 +1,35 @@
+State IDLE as "準備待ち" color "#4F46E5":
+    開始を待つ
+State RUNNING as "実行中" color "#22C55E":
+    要求を処理する
+State RECOVERING as "復旧中" color "#F97316":
+    実行を復旧する
+State DONE as "完了" color "#0284C7":
+    正常に終了した
+State FAILED as "失敗" color "#FF0000":
+    異常を記録した
+
+StateGroup WORK as "稼働系":
+    IDLE
+    RUNNING
+    RECOVERING
+
+EventCategoryHeaders "系統" > "区分" > "種別"
+Event START as "開始" in "操作" > "運転"
+Event RETRY as "再試行"
+
+Transition IDLE on START -> DONE:
+    要求を記録する
+Transition RUNNING on START:
+    Common:
+        検査を記録する
+    Branch "許可" -> DONE:
+        -
+    Branch "異常" -> FAILED:
+        通知する
+Transition RECOVERING on RETRY -> IDLE:
+    復旧を記録する
+Transition IDLE on RETRY -> IDLE:
+    再確認する
+Transition DONE on RETRY -> -:
+    -

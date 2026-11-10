@@ -78,11 +78,22 @@ const conditionalTransition = z.strictObject({
     ),
 });
 const transition = z.union([plainTransition, conditionalTransition]);
+const stateGroup = z.strictObject({
+  id: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  name: z
+    .string()
+    .refine((value) => value.trim().length > 0 && !/["\r\n]/.test(value)),
+  stateIds: z
+    .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+    .min(2)
+    .refine((ids) => new Set(ids).size === ids.length),
+});
 const model = z
   .strictObject({
     states: z.array(state),
     events: z.array(event),
     transitions: z.array(transition),
+    stateGroups: z.array(stateGroup).optional(),
     eventCategoryHeaders: z
       .array(
         z
@@ -99,10 +110,15 @@ const model = z
     const pairs = new Set(
       value.transitions.map((item) => `${item.fromStateId}:${item.eventId}`),
     );
+    const groups = value.stateGroups ?? [];
+    const members = groups.flatMap((group) => group.stateIds);
     return (
       states.size === value.states.length &&
       events.size === value.events.length &&
       pairs.size === value.transitions.length &&
+      new Set(groups.map((group) => group.id)).size === groups.length &&
+      new Set(members).size === members.length &&
+      members.every((id) => states.has(id)) &&
       value.events.every(
         (item) =>
           (item.categoryPath?.length ?? 0) <=

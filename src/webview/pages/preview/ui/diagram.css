@@ -1,4 +1,5 @@
 .state-diagram-section {
+  --diagram-group-line-width: 1px;
   --diagram-height: 360px;
   --diagram-edge-mix: 45%;
   --diagram-node-mix: 12%;
@@ -30,7 +31,8 @@
     var(--diagram-background)
   );
 }
-.state-node .react-flow__handle {
+.state-node .react-flow__handle,
+.state-group .react-flow__handle {
   opacity: 0;
   pointer-events: none;
   width: 0;
@@ -38,6 +40,18 @@
   min-width: 0;
   min-height: 0;
   border: 0;
+}
+
+.state-group {
+  width: 100%;
+  height: 100%;
+  border: var(--diagram-group-line-width) solid var(--diagram-foreground);
+  background: transparent;
+}
+
+.state-group-label {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .diagram-defs {
   position: absolute;
