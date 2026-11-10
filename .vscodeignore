@@ -1,0 +1,9 @@
+# 配布する実行ファイル、説明、ライセンス、アイコンとDSLサンプルだけを含める。
+**
+!package.json
+!README.md
+!LICENSE
+!dist/extension/extension.cjs
+!dist/webview/**
+!images/glitchstate-icon-256.png
+!examples/*.gls

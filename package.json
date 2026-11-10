@@ -1,8 +1,34 @@
 {
   "name": "glitchstate",
   "displayName": "GlitchState",
-  "description": "状態設計のためのVS Code拡張機能",
-  "version": "0.1.0",
+  "description": "Visualize state definitions, state transition diagrams, and state transition tables together in VS Code.",
+  "publisher": "Glitch-Sound",
+  "version": "0.0.1",
+  "icon": "images/glitchstate-icon-256.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Glitch-Sound/glitchstate.git"
+  },
+  "homepage": "https://github.com/Glitch-Sound/glitchstate#readme",
+  "bugs": {
+    "url": "https://github.com/Glitch-Sound/glitchstate/issues"
+  },
+  "keywords": [
+    "state machine",
+    "state-machine",
+    "state diagram",
+    "state transition",
+    "transition table",
+    "software design",
+    "system design",
+    "dsl",
+    "gls",
+    "glitchstate"
+  ],
+  "categories": [
+    "Visualization",
+    "Programming Languages"
+  ],
   "private": true,
   "license": "MIT",
   "type": "module",
