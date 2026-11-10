@@ -153,6 +153,8 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (!isPreviewUpdate(message)) return;
   // 同じURIでも文書の再オープンで版番号が戻るため、通知の通し番号を使う。
   if (latest && message.sequence < latest.sequence) return;
+  // 再表示による同一通知で、PNG変換中の描画世代を無効にしない。
+  if (same(message, latest)) return;
   stateSelectionStore.getState().reconcile(message.uri, message.model);
   const generation = diagramViewportStore.getState().accept(message.uri);
   activeGeneration = generation;

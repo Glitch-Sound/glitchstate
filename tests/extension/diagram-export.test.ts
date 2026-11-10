@@ -145,6 +145,49 @@ test("REQ-043-S03 古い要求、別文書と古い通知の応答を無視す�
   await task;
   expect(h.port.write).toHaveBeenCalledTimes(1);
 });
+for (const switchDocument of [false, true])
+  test(`REQ-043-S02 PNG生成待機中の更新を中止し現在の対象へ再操作する switch=${switchDocument}`, async () => {
+    const h = setup("png");
+    const first = h.flow.start(begin);
+    await flush();
+    const previous = h.requests[0];
+    const current = {
+      uri: switchDocument ? "file:///other.gls" : source.uri,
+      version: switchDocument ? 1 : 2,
+      sequence: 10,
+    };
+    h.change(current);
+    h.flow.cancel();
+    await first;
+    h.flow.receive({
+      ...previous,
+      type: "glitchstate.export-result",
+      success: true,
+      data: png,
+    });
+    expect(h.port.write).not.toHaveBeenCalled();
+    expect(h.port.notify).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining("更新"),
+    );
+    const retry = h.flow.start({
+      ...begin,
+      ...current,
+      requestId: "current-png",
+    });
+    await flush();
+    expect(h.requests.at(-1)).toEqual({
+      ...current,
+      requestId: "current-png",
+      type: "glitchstate.export",
+      format: "png",
+    });
+    h.answer();
+    await retry;
+    expect(h.port.write).toHaveBeenCalledExactlyOnceWith(
+      "file:///output/result.png",
+      Buffer.from(png, "base64"),
+    );
+  });
 for (const changes of [
   { format: "png" },
   { data: "not an image" },

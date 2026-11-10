@@ -186,6 +186,58 @@ test("REQ-042-S05 PNG生成に必要なローカル画像だけをCSPで許可�
   expect(panel.webview.html).toContain("default-src 'none'");
   expect(panel.webview.html).not.toMatch(/img-src[^;"]*(?:https?:|\*)/);
 });
+test("REQ-043-S07 同一通知の再送後も要求に対応するPNGを1回だけ保存する接続", async () => {
+  host.api.window.showQuickPick.mockResolvedValueOnce({ format: "png" });
+  host.api.window.showSaveDialog.mockResolvedValueOnce({
+    toString: () => "file:///output.png",
+  });
+  const panel = await open();
+  const update = panel.webview.postMessage.mock.calls.at(-1)?.[0] as {
+    uri: string;
+    version: number;
+    sequence: number;
+  };
+  const { uri, version, sequence } = update;
+  panel.incoming.emit({ uri, version, sequence, type: "glitchstate.rendered" });
+  panel.incoming.emit({
+    uri,
+    version,
+    sequence,
+    type: "glitchstate.export-start",
+    requestId: "png-replay",
+  });
+  const requests = () =>
+    panel.webview.postMessage.mock.calls
+      .map(([m]) => m as { type: string })
+      .filter((m) => m.type === "glitchstate.export");
+  await expect.poll(() => requests().length).toBe(1);
+  panel.visibility.emit();
+  expect(panel.webview.postMessage).toHaveBeenLastCalledWith(update);
+  const png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1sAAAAASUVORK5CYII=";
+  panel.incoming.emit({
+    ...requests()[0],
+    type: "glitchstate.export-result",
+    success: true,
+    data: png,
+  });
+  await expect
+    .poll(() =>
+      panel.webview.postMessage.mock.calls.some(
+        ([m]) => (m as { type: string }).type === "glitchstate.export-finished",
+      ),
+    )
+    .toBe(true);
+  expect(requests()).toHaveLength(1);
+  expect(host.api.workspace.fs.writeFile).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ toString: expect.any(Function) }),
+    Buffer.from(png, "base64"),
+  );
+  expect(String(host.api.workspace.fs.writeFile.mock.calls[0][0])).toBe(
+    "file:///output.png",
+  );
+  expect(host.api.window.showErrorMessage).not.toHaveBeenCalled();
+});
 test("REQ-043-S06 エラー保持中の未保存本文と診断を画像保存で変更しない接続", async () => {
   const document = host.doc();
   const panel = await open(document);

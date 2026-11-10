@@ -252,51 +252,138 @@ test("REQ-042-S05 REQ-042-S03 PNGをデコードし不透明背景、状態、�
 }) => {
   await start(page);
   await show(page);
+  // 保存側の取得、変換関数を使わず、表示中の既知の2経路から検査点を求める。
+  const samples = await page.evaluate(() => {
+    const colorCanvas = document.createElement("canvas");
+    colorCanvas.width = colorCanvas.height = 1;
+    const colorContext = colorCanvas.getContext("2d");
+    if (!colorContext) throw new Error("色を取得できない");
+    return ["Z:X", "W:W"].flatMap((id) => {
+      const curve = document.querySelector<SVGPathElement>(
+        `.react-flow__edge[data-id="${id}"] .state-edge-path`,
+      );
+      if (!curve) throw new Error(`表示中の経路がない: ${id}`);
+      const style = getComputedStyle(curve);
+      colorContext.clearRect(0, 0, 1, 1);
+      colorContext.fillStyle = style.stroke;
+      colorContext.fillRect(0, 0, 1, 1);
+      const rgb = Array.from(colorContext.getImageData(0, 0, 1, 1).data).slice(
+        0,
+        3,
+      );
+      const length = curve.getTotalLength();
+      const mid = curve.getPointAtLength(length / 2);
+      const end = curve.getPointAtLength(length);
+      const before = curve.getPointAtLength(length - 0.1);
+      const angle = Math.atan2(end.y - before.y, end.x - before.x);
+      const markerId = style.markerEnd.match(/#([^)"']+)/)?.[1];
+      const marker = markerId ? document.getElementById(markerId) : null;
+      if (!(marker instanceof SVGMarkerElement))
+        throw new Error(`表示中の矢尻がない: ${id}`);
+      const shape = marker.querySelector("path");
+      if (!shape) throw new Error("矢尻の形状がない");
+      const bounds = shape.getBBox();
+      const view = marker.viewBox.baseVal;
+      const scale = Math.min(
+        marker.markerWidth.baseVal.value / view.width,
+        marker.markerHeight.baseVal.value / view.height,
+      );
+      const units = Number.parseFloat(style.strokeWidth);
+      // 三角形の上側の内部を使い、中央の経路の画素で矢尻の欠落を見逃さない。
+      const x =
+        (bounds.x + bounds.width / 4 - marker.refX.baseVal.value) *
+        scale *
+        units;
+      const y =
+        (bounds.y + bounds.height / 4 - marker.refY.baseVal.value) *
+        scale *
+        units;
+      return [
+        { name: `${id} 経路`, x: mid.x, y: mid.y, rgb },
+        {
+          name: `${id} 矢尻`,
+          x: end.x + x * Math.cos(angle) - y * Math.sin(angle),
+          y: end.y + x * Math.sin(angle) + y * Math.cos(angle),
+          rgb,
+        },
+      ];
+    });
+  });
   const svg = await image(page);
-  const result = await page.evaluate(async (svg) => {
-    const policy = document.createElement("meta");
-    policy.httpEquiv = "Content-Security-Policy";
-    policy.content = "img-src blob:";
-    document.head.append(policy);
-    const path = "/pages/preview/ui/rasterize-state-diagram.ts";
-    const { rasterizeStateDiagram } = await import(path);
-    const data = await rasterizeStateDiagram(svg);
-    const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    URL.revokeObjectURL(url);
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvasがない");
-    ctx.drawImage(img, 0, 0);
-    const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
-    let colored = 0,
-      light = 0,
-      opaque = true;
-    for (let i = 0; i < pixels.length; i += 4) {
-      opaque &&= pixels[i + 3] === 255;
-      if (pixels[i + 1] > pixels[i] + 20) colored++;
-      if (
-        pixels[i] > 60 &&
-        Math.abs(pixels[i] - pixels[i + 1]) < 4 &&
-        Math.abs(pixels[i] - pixels[i + 2]) < 4
-      )
-        light++;
-    }
-    return {
-      signature: data.slice(0, 11),
-      width: img.width,
-      height: img.height,
-      corner: Array.from(pixels.slice(0, 4)),
-      colored,
-      light,
-      opaque,
-    };
-  }, svg);
+  const result = await page.evaluate(
+    async ({ svg, samples }) => {
+      const policy = document.createElement("meta");
+      policy.httpEquiv = "Content-Security-Policy";
+      policy.content = "img-src blob:";
+      document.head.append(policy);
+      const path = "/pages/preview/ui/rasterize-state-diagram.ts";
+      const { rasterizeStateDiagram } = await import(path);
+      const data = await rasterizeStateDiagram(svg);
+      const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvasがない");
+      ctx.drawImage(img, 0, 0);
+      const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+      const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+      const view = parsed.documentElement
+        .getAttribute("viewBox")
+        ?.split(" ")
+        .map(Number);
+      if (view?.length !== 4) throw new Error("図の座標範囲がない");
+      // viewBoxは座標の対応だけに使い、検査する経路と矢尻は画面側から独立に決める。
+      const regions = samples.map((point) => {
+        const cx = ((point.x - view[0]) / view[2]) * img.width;
+        const cy = ((point.y - view[1]) / view[3]) * img.height;
+        const rx = (0.6 / view[2]) * img.width;
+        const ry = (0.6 / view[3]) * img.height;
+        let count = 0;
+        for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
+          for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+            if (x < 0 || y < 0 || x >= img.width || y >= img.height) continue;
+            const offset = (y * img.width + x) * 4;
+            if (
+              point.rgb.every(
+                (channel, c) => Math.abs(pixels[offset + c] - channel) < 10,
+              )
+            )
+              count++;
+          }
+        return { name: point.name, count };
+      });
+      let colored = 0,
+        light = 0,
+        opaque = true;
+      for (let i = 0; i < pixels.length; i += 4) {
+        opaque &&= pixels[i + 3] === 255;
+        if (pixels[i + 1] > pixels[i] + 20) colored++;
+        if (
+          pixels[i] > 60 &&
+          Math.abs(pixels[i] - pixels[i + 1]) < 4 &&
+          Math.abs(pixels[i] - pixels[i + 2]) < 4
+        )
+          light++;
+      }
+      return {
+        signature: data.slice(0, 11),
+        width: img.width,
+        height: img.height,
+        corner: Array.from(pixels.slice(0, 4)),
+        colored,
+        light,
+        opaque,
+        regions,
+      };
+    },
+    { svg, samples },
+  );
   expect(result.signature).toBe("iVBORw0KGgo");
   expect(result.width).toBeGreaterThan(0);
   expect(result.height).toBeGreaterThan(0);
@@ -304,6 +391,14 @@ test("REQ-042-S05 REQ-042-S03 PNGをデコードし不透明背景、状態、�
   expect(result.opaque).toBe(true);
   expect(result.colored).toBeGreaterThan(100);
   expect(result.light).toBeGreaterThan(100);
+  expect(result.regions.map((r) => r.name)).toEqual([
+    "Z:X 経路",
+    "Z:X 矢尻",
+    "W:W 経路",
+    "W:W 矢尻",
+  ]);
+  for (const region of result.regions)
+    expect.soft(region.count, `${region.name}の実画素`).toBeGreaterThan(0);
 });
 const saveButton = (page: Page) =>
   region(page).getByRole("button", { name: "図をエクスポート", exact: true });
@@ -319,6 +414,7 @@ async function notices(page: Page) {
             data?: string;
             success?: boolean;
             format?: string;
+            error?: string;
           }[];
         }
       ).notices,
@@ -380,6 +476,180 @@ test("REQ-041-S01 PNG生成要求を実際のPNG応答へ接続する", async ({
   await show(page);
   expect(await save(page, "png")).toMatch(/^iVBORw0KGgo/);
 });
+async function pendingPng(page: Page) {
+  await page.evaluate(() => {
+    const nativeDecode = HTMLImageElement.prototype.decode;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const control = { started: 0, release };
+    HTMLImageElement.prototype.decode = async function () {
+      await nativeDecode.call(this);
+      control.started++;
+      await gate;
+    };
+    Object.assign(window, { pngGeneration: control });
+  });
+  await saveButton(page).click();
+  const request = (await notices(page))
+    .filter((n) => n.type === "glitchstate.export-start")
+    .at(-1);
+  if (!request) throw new Error("保存要求がない");
+  await page.evaluate((data) => window.postMessage(data, "*"), {
+    ...request,
+    type: "glitchstate.export",
+    format: "png",
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { pngGeneration: { started: number } })
+            .pngGeneration.started,
+      ),
+    )
+    .toBe(1);
+  return request;
+}
+async function releasePng(page: Page) {
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        pngGeneration: { release(): void };
+      }
+    ).pngGeneration.release(),
+  );
+}
+async function exportResponse(page: Page, requestId: string) {
+  const responses = async () =>
+    (await notices(page)).filter(
+      (n) =>
+        n.type === "glitchstate.export-result" && n.requestId === requestId,
+    );
+  await expect.poll(async () => (await responses()).length).toBe(1);
+  return (await responses())[0];
+}
+test("REQ-043-S07 PNG生成中の同一通知の再送でも元の要求を成功させる", async ({
+  page,
+}) => {
+  await start(page);
+  await show(page);
+  const before = await image(page);
+  const request = await pendingPng(page);
+  await page.evaluate(
+    (model) =>
+      new Promise<void>((resolve) => {
+        const received = (event: MessageEvent) => {
+          if (event.data?.type !== "glitchstate.update") return;
+          window.removeEventListener("message", received);
+          resolve();
+        };
+        window.addEventListener("message", received);
+        window.postMessage(
+          {
+            type: "glitchstate.update",
+            uri: "file:///a.gls",
+            version: 1,
+            sequence: 1,
+            model,
+            hasErrors: false,
+          },
+          "*",
+        );
+      }),
+    model,
+  );
+  await expect(saveButton(page)).toBeDisabled();
+  await releasePng(page);
+  const response = await exportResponse(page, request.requestId);
+  expect(response.success).toBe(true);
+  expect(response.error).toBeUndefined();
+  expect(response.data).toMatch(/^iVBORw0KGgo/);
+  const dimensions = await page.evaluate(async (data) => {
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return [img.naturalWidth, img.naturalHeight];
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }, response.data ?? "");
+  expect(dimensions[0]).toBeGreaterThan(0);
+  expect(dimensions[1]).toBeGreaterThan(0);
+  expect(await image(page)).toBe(before);
+  expect(
+    (await notices(page)).filter((n) => n.type === "glitchstate.export-start"),
+  ).toHaveLength(1);
+  await finish(page, request);
+  await expect(saveButton(page)).toBeEnabled();
+});
+for (const switchDocument of [false, true])
+  test(`REQ-043-S02 PNG生成中の実際の更新を中止して現在の図を再保存する switch=${switchDocument}`, async ({
+    page,
+  }) => {
+    await start(page);
+    await show(page);
+    const request = await pendingPng(page);
+    const uri = switchDocument ? "file:///other.gls" : "file:///a.gls";
+    const updated: GlsModel = {
+      states: model.states.map((s) => ({ ...s, name: `更新${s.id}` })),
+      events: model.events,
+      transitions: [
+        { fromStateId: "A", eventId: "GO", action: null, targetStateId: "W" },
+      ],
+    };
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      type: "glitchstate.update",
+      uri,
+      version: switchDocument ? 1 : 2,
+      sequence: 2,
+      model: updated,
+      hasErrors: false,
+    });
+    await expect
+      .poll(async () =>
+        (await notices(page)).some(
+          (n) => n.type === "glitchstate.rendered" && n.sequence === 2,
+        ),
+      )
+      .toBe(true);
+    await releasePng(page);
+    const stale = await exportResponse(page, request.requestId);
+    expect(stale.success).toBe(false);
+    expect(stale.error).toContain("更新");
+    expect(stale.data).toBeUndefined();
+    await finish(page, request);
+    await expect(saveButton(page)).toBeEnabled();
+    await saveButton(page).click();
+    const retry = (await notices(page))
+      .filter((n) => n.type === "glitchstate.export-start")
+      .at(-1);
+    if (!retry) throw new Error("再保存の要求がない");
+    expect(retry.sequence).toBe(2);
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      ...retry,
+      type: "glitchstate.export",
+      format: "svg",
+    });
+    const current = await exportResponse(page, retry.requestId);
+    expect(current.success).toBe(true);
+    const svg = await openImage(page, current.data ?? "");
+    await expect(svg.locator('g[data-state-id="A"] text')).toHaveText("更新A");
+    await expect(svg.locator("path[data-edge-id]")).toHaveCount(1);
+    await expect(svg.locator("path[data-edge-id]")).toHaveAttribute(
+      "data-edge-id",
+      "A:W",
+    );
+    await page.evaluate((data) => window.postMessage(data, "*"), {
+      ...retry,
+      type: "glitchstate.export-finished",
+    });
+    await expect(saveButton(page)).toBeEnabled();
+  });
 test("REQ-041-S02 キーボードで保存を一度ずつ起動する", async ({ page }) => {
   await start(page);
   await show(page);
