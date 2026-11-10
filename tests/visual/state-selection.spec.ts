@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { GlsModel } from "../../src/core";
+import { assertArrowheadFollowsPath } from "./arrowhead-direction";
 
 const model: GlsModel = {
   states: [
@@ -317,10 +318,22 @@ test("REQ-034-S01 REQ-034-S02 REQ-034-S03 行内のクリックを1回だけ数�
   ]);
   await row(page, "A").locator("td").nth(0).click();
   await assertSelection(page, "A");
+  await expect(stateTable(page).locator("button:focus")).toHaveCount(0);
+  await expect(page.locator("body")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await assertSelection(page, null);
+  await expect(page.locator("body")).toBeFocused();
+  await button(page, "A").click();
+  await assertSelection(page, "A");
   await button(page, "A").click();
   await assertSelection(page, null);
   await row(page, "A").locator("td").nth(2).click();
   await assertSelection(page, "A");
+  await expect(stateTable(page).locator("button:focus")).toHaveCount(0);
+  await expect(page.locator("body")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await assertSelection(page, null);
+  await expect(page.locator("body")).toBeFocused();
   await button(page, "B").click();
   await assertSelection(page, "B");
   await page.keyboard.press("Escape");
@@ -379,6 +392,22 @@ test("REQ-036-S01 REQ-036-S02 ノードIDだけを強調し同名状態と同じ
 }) => {
   await start(page);
   await show(page);
+  const assertArrowheads = async () => {
+    const edgeIds = ["Z:A", "state-group:A:X", "B:A", "A:A"];
+    await expect(diagram(page).locator(".react-flow__edge")).toHaveCount(
+      edgeIds.length,
+    );
+    for (const id of edgeIds) {
+      await test.step(`矢印${id}の実際の矢尻を終端方向と照合する`, async () => {
+        const path = diagram(page).locator(
+          `.react-flow__edge[data-id="${id}"] .state-edge-path`,
+        );
+        await expect(path).toHaveCount(1);
+        await assertArrowheadFollowsPath(path);
+      });
+    }
+  };
+  await assertArrowheads();
   const before = await linesAndColors(page);
   const frame = diagram(page).locator(
     '.react-flow__node[data-id="state-group:A"] .state-group',
@@ -386,6 +415,7 @@ test("REQ-036-S01 REQ-036-S02 ノードIDだけを強調し同名状態と同じ
   const background = await paint(frame);
   await button(page, "A").click();
   await assertSelection(page, "A");
+  await assertArrowheads();
   expect(await paint(frame)).toBe(background);
   expect(await linesAndColors(page)).toEqual(before);
   await node(page, "B").click({ force: true });
@@ -395,6 +425,7 @@ test("REQ-036-S01 REQ-036-S02 ノードIDだけを強調し同名状態と同じ
   await expect(diagram(page).locator(".react-flow__edge")).toHaveCount(4);
   await button(page, "A").click();
   await assertSelection(page, null);
+  await assertArrowheads();
 });
 
 test("REQ-036-S03 手動移動後の選択、切替、解除で図の配置とviewportと通知を変えない", async ({

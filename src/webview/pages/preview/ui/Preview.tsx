@@ -30,6 +30,7 @@ export function Preview(props: PreviewProps): ReactElement {
   useEffect(() => {
     const element = root.current;
     if (!element) return;
+    const previewDocument = element.ownerDocument;
     // 行のセルとネイティブbuttonからの起動を、同じclickで一度だけ処理する。
     const select = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return;
@@ -46,10 +47,11 @@ export function Preview(props: PreviewProps): ReactElement {
         stateSelectionStore.getState().clear();
     };
     element.addEventListener("click", select);
-    element.addEventListener("keydown", clear);
+    // 非フォーカス要素のクリック後はbodyへ届くため、同じWebview文書で受け取る。
+    previewDocument.addEventListener("keydown", clear);
     return () => {
       element.removeEventListener("click", select);
-      element.removeEventListener("keydown", clear);
+      previewDocument.removeEventListener("keydown", clear);
     };
   }, [documentUri, model]);
   useEffect(() => {
