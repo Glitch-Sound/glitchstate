@@ -75,3 +75,38 @@
 .diagram-defs marker path {
   fill: var(--diagram-edge-color);
 }
+
+.diagram-controls {
+  --diagram-control-gap: 8px;
+  --diagram-control-padding-y: 4px;
+  --diagram-control-padding-x: 9px;
+  --diagram-control-focus-width: 1px;
+  --diagram-control-focus-offset: 2px;
+  display: flex;
+  margin: 0;
+  min-width: 0;
+  border: 0;
+  padding-inline: 0;
+  align-items: center;
+  gap: var(--diagram-control-gap);
+  padding-block: var(--diagram-control-gap);
+  color: var(--diagram-foreground);
+  background: var(--diagram-background);
+}
+.diagram-controls button {
+  font: inherit;
+  color: var(--vscode-button-foreground, var(--diagram-foreground));
+  background: var(--vscode-button-background, var(--diagram-background));
+  border: 0;
+  padding: var(--diagram-control-padding-y) var(--diagram-control-padding-x);
+  cursor: pointer;
+}
+.diagram-controls button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.diagram-controls button:focus-visible {
+  outline: var(--diagram-control-focus-width) solid
+    var(--vscode-focusBorder, var(--diagram-foreground));
+  outline-offset: var(--diagram-control-focus-offset);
+}

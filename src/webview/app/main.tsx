@@ -6,7 +6,11 @@ import {
   type PreviewUpdate,
   type WebviewMessage,
 } from "../../preview-protocol";
-import { Preview, stateSelectionStore } from "../pages/preview";
+import {
+  diagramViewportStore,
+  Preview,
+  stateSelectionStore,
+} from "../pages/preview";
 import { completePreviewRender } from "./render-completion";
 import "./style.css";
 
@@ -18,7 +22,13 @@ const element = document.getElementById("root");
 if (element === null) throw new Error("Webviewの起動先が見つからない");
 const root = createRoot(element);
 
-function PreviewRoot({ message }: { message: PreviewUpdate }) {
+function PreviewRoot({
+  message,
+  generation,
+}: {
+  message: PreviewUpdate;
+  generation: number;
+}) {
   const onRenderReady = useCallback(() => {
     completePreviewRender(message, latest, (value) =>
       vscode.postMessage(value),
@@ -27,6 +37,7 @@ function PreviewRoot({ message }: { message: PreviewUpdate }) {
   return (
     <Preview
       documentUri={message.uri}
+      generation={generation}
       model={message.model}
       hasErrors={message.hasErrors}
       onRenderReady={onRenderReady}
@@ -41,10 +52,11 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   // 同じURIでも文書の再オープンで版番号が戻るため、通知の通し番号を使う。
   if (latest && message.sequence < latest.sequence) return;
   stateSelectionStore.getState().reconcile(message.uri, message.model);
+  const generation = diagramViewportStore.getState().accept(message.uri);
   latest = message;
   root.render(
     <React.StrictMode>
-      <PreviewRoot message={message} />
+      <PreviewRoot message={message} generation={generation} />
     </React.StrictMode>,
   );
 });

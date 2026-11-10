@@ -414,7 +414,15 @@ test("REQ-030-S03 長い名前と実ループを枠に収め画面から欠落�
     .all())
     contains(region, await bounds(el));
   await assertArrowheadFollowsPath(edge(page, "A", "A"));
-  await expect(diagram(page).getByRole("button")).toHaveCount(0);
+  await expect(diagram(page).getByRole("button")).toHaveText([
+    "-",
+    "Reset",
+    "+",
+  ]);
+  for (const name of ["縮小", "等倍", "拡大"])
+    await expect(
+      diagram(page).getByRole("button", { name, exact: true }),
+    ).toHaveCount(1);
   await node(page, "A").click({ force: true });
   await expect(diagram(page).locator(".react-flow__node.selected")).toHaveCount(
     0,

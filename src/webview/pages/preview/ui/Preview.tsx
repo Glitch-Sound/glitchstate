@@ -9,17 +9,18 @@ import "./preview.css";
 
 interface PreviewProps {
   documentUri: string;
+  generation: number;
   model: GlsModel | null;
   hasErrors: boolean;
   onRenderReady?: () => void;
 }
 
 /** 状態定義の内容と現在の解析状況を表示する。
- * @param props 対象文書のURI、定義順のモデル、解析状況と3表示の準備完了の通知先。
+ * @param props 対象文書のURIと描画世代、定義順のモデル、解析状況と3表示の準備完了の通知先。
  * @returns 状態定義表、状態遷移図、状態遷移表、または表示できない理由。
  */
 export function Preview(props: PreviewProps): ReactElement {
-  const { documentUri, model, hasErrors, onRenderReady } = props;
+  const { documentUri, generation, model, hasErrors, onRenderReady } = props;
   const root = useRef<HTMLElement>(null);
   const selection = useStore(stateSelectionStore);
   const selectedStateId =
@@ -112,6 +113,8 @@ export function Preview(props: PreviewProps): ReactElement {
           </section>
           <StateDiagram
             model={model}
+            documentUri={documentUri}
+            generation={generation}
             selectedStateId={selectedStateId}
             onRenderReady={onRenderReady}
           />

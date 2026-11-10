@@ -12,5 +12,7 @@ export const DIAGRAM_CONFIG = {
   loopExtent: 48,
   reciprocalOffset: 28,
   minZoom: 0.01,
-  maxZoom: 1,
+  maxZoom: 2,
+  initialMaxZoom: 1,
+  zoomStep: 0.1,
 } as const;
