@@ -2,7 +2,11 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { GlsModel } from "../../../../core";
 
-export type StateNodeData = { name: string; color: string };
+export type StateNodeData = {
+  name: string;
+  color: string;
+  isStateSelected?: boolean;
+};
 export type StateDiagramNode = Node<StateNodeData, "state">;
 export type StateGroupData = {
   name: string;

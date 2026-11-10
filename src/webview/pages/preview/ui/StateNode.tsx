@@ -13,6 +13,7 @@ export function StateNode(props: NodeProps<StateDiagramNode>): ReactElement {
   return (
     <div
       className="state-node"
+      data-state-selected={data.isStateSelected === true}
       style={
         {
           "--state-color": data.color,

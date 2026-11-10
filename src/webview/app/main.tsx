@@ -6,7 +6,7 @@ import {
   type PreviewUpdate,
   type WebviewMessage,
 } from "../../preview-protocol";
-import { Preview } from "../pages/preview";
+import { Preview, stateSelectionStore } from "../pages/preview";
 import { completePreviewRender } from "./render-completion";
 import "./style.css";
 
@@ -26,6 +26,7 @@ function PreviewRoot({ message }: { message: PreviewUpdate }) {
   }, [message]);
   return (
     <Preview
+      documentUri={message.uri}
       model={message.model}
       hasErrors={message.hasErrors}
       onRenderReady={onRenderReady}
@@ -39,6 +40,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (!isPreviewUpdate(message)) return;
   // 同じURIでも文書の再オープンで版番号が戻るため、通知の通し番号を使う。
   if (latest && message.sequence < latest.sequence) return;
+  stateSelectionStore.getState().reconcile(message.uri, message.model);
   latest = message;
   root.render(
     <React.StrictMode>

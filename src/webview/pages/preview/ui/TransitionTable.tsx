@@ -5,11 +5,14 @@ import { buildEventRows } from "../model/build-event-rows";
 import { ConditionalTransitionCell } from "./ConditionalTransitionCell";
 
 /** 状態遷移表または不足する軸の案内を表示する。
- * @param props 定義順の状態とイベント、IDで関連付けた遷移のモデル。
+ * @param props 定義順の状態とイベント、IDで関連付けた遷移のモデルと選択中の状態ID。
  * @returns 処理と遷移先を持つ表、または空の軸の案内。
  */
-export function TransitionTable(props: { model: GlsModel }): ReactElement {
-  const { model } = props;
+export function TransitionTable(props: {
+  model: GlsModel;
+  selectedStateId?: string | null;
+}): ReactElement {
+  const { model, selectedStateId } = props;
   const prefix = useId();
   const { depth, rows } = buildEventRows(model.events);
   const categoryColumns = Array.from({ length: depth }, (_, level) => ({
@@ -55,6 +58,7 @@ export function TransitionTable(props: { model: GlsModel }): ReactElement {
                 {model.states.map((state, index) => (
                   <th
                     key={state.id}
+                    data-state-selected={state.id === selectedStateId}
                     id={`${prefix}-state-${index}`}
                     scope="col"
                     style={{ color: state.color }}
@@ -106,7 +110,11 @@ export function TransitionTable(props: { model: GlsModel }): ReactElement {
                         `${state.id}:${event.id}`,
                       );
                       return transition ? (
-                        <td key={state.id} headers={headers}>
+                        <td
+                          key={state.id}
+                          headers={headers}
+                          data-state-selected={state.id === selectedStateId}
+                        >
                           {"branches" in transition ? (
                             <ConditionalTransitionCell
                               transition={transition}
@@ -130,6 +138,7 @@ export function TransitionTable(props: { model: GlsModel }): ReactElement {
                           key={state.id}
                           headers={headers}
                           className="transition-undefined"
+                          data-state-selected={state.id === selectedStateId}
                         >
                           未定義
                         </td>

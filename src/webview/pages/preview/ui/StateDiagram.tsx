@@ -35,9 +35,11 @@ const edgeTypes = { state: StateEdge };
 
 function DiagramCanvas({
   graph,
+  selectedStateId,
   onRenderReady,
 }: {
   graph: ReturnType<typeof buildStateDiagram>;
+  selectedStateId?: string | null;
   onRenderReady?: () => void;
 }) {
   const markerId = useId();
@@ -157,10 +159,25 @@ function DiagramCanvas({
     () => connectDiagramEdges(nodes, graph.edges, markerId),
     [nodes, graph.edges, markerId],
   );
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((node) =>
+        node.type === "state"
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                isStateSelected: node.id === selectedStateId,
+              },
+            }
+          : node,
+      ),
+    [nodes, selectedStateId],
+  );
   return (
     <div className="state-diagram-canvas">
       <ReactFlow
-        nodes={nodes}
+        nodes={displayNodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -195,14 +212,15 @@ function DiagramCanvas({
 }
 
 /** 2表の間に状態遷移図または状態がないことの案内を表示する。
- * @param props 状態と有向の遷移を持つ共通モデルと図の準備完了の通知先。
+ * @param props 状態と有向の遷移の共通モデル、選択中の状態IDと図の準備完了の通知先。
  * @returns ノードと矢印を持つ図領域。
  */
 export function StateDiagram(props: {
   model: GlsModel;
+  selectedStateId?: string | null;
   onRenderReady?: () => void;
 }): ReactElement {
-  const { model, onRenderReady } = props;
+  const { model, selectedStateId, onRenderReady } = props;
   useEffect(() => {
     if (model.states.length === 0) onRenderReady?.();
   }, [model, onRenderReady]);
@@ -221,7 +239,11 @@ export function StateDiagram(props: {
         <p role="status">状態が定義されていない。</p>
       ) : (
         <ReactFlowProvider key={identity}>
-          <DiagramCanvas graph={graph} onRenderReady={onRenderReady} />
+          <DiagramCanvas
+            graph={graph}
+            selectedStateId={selectedStateId}
+            onRenderReady={onRenderReady}
+          />
         </ReactFlowProvider>
       )}
     </section>

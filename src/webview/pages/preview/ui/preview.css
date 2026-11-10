@@ -1,3 +1,35 @@
+.preview {
+  --state-selection-accent: var(
+    --vscode-list-activeSelectionBackground,
+    var(--vscode-foreground, #cccccc)
+  );
+  --state-selection-mix: 18%;
+  --state-selection-focus-width: 1px;
+  --state-selection-focus-offset: 0.15em;
+  --state-selection-background: color-mix(
+    in srgb,
+    var(--state-selection-accent) var(--state-selection-mix),
+    var(--vscode-editor-background, #1e1e1e)
+  );
+}
+
+.state-select {
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.state-select:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: var(--state-selection-focus-width);
+  text-underline-offset: var(--state-selection-focus-offset);
+}
+
 .state-table,
 .transition-table {
   border-collapse: collapse;
@@ -12,6 +44,11 @@
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.state-table tr[data-state-selected="true"] > td,
+.transition-table [data-state-selected="true"] {
+  background: var(--state-selection-background);
 }
 
 .state-swatch {

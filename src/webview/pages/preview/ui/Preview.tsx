@@ -1,27 +1,62 @@
 /** 共通モデルから状態定義表、状態遷移図、状態遷移表を描画する。 */
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
+import { useStore } from "zustand";
 import type { GlsModel } from "../../../../core";
+import { stateSelectionStore } from "../model/state-selection";
 import { StateDiagram } from "./StateDiagram";
 import { TransitionTable } from "./TransitionTable";
 import "./preview.css";
 
 interface PreviewProps {
+  documentUri: string;
   model: GlsModel | null;
   hasErrors: boolean;
   onRenderReady?: () => void;
 }
 
 /** 状態定義の内容と現在の解析状況を表示する。
- * @param props 定義順のモデル、解析エラーの有無と3表示の準備完了の通知先。
+ * @param props 対象文書のURI、定義順のモデル、解析状況と3表示の準備完了の通知先。
  * @returns 状態定義表、状態遷移図、状態遷移表、または表示できない理由。
  */
 export function Preview(props: PreviewProps): ReactElement {
-  const { model, hasErrors, onRenderReady } = props;
+  const { documentUri, model, hasErrors, onRenderReady } = props;
+  const root = useRef<HTMLElement>(null);
+  const selection = useStore(stateSelectionStore);
+  const selectedStateId =
+    selection.uri === documentUri &&
+    model?.states.some((state) => state.id === selection.stateId)
+      ? selection.stateId
+      : null;
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    // 行のセルとネイティブbuttonからの起動を、同じclickで一度だけ処理する。
+    const select = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const row = event.target.closest(".state-table tbody tr[data-state-id]");
+      const id = row?.getAttribute("data-state-id");
+      if (id && element.contains(row) && model?.states.some((s) => s.id === id))
+        stateSelectionStore.getState().toggle(documentUri, id);
+    };
+    const clear = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        stateSelectionStore.getState().uri === documentUri
+      )
+        stateSelectionStore.getState().clear();
+    };
+    element.addEventListener("click", select);
+    element.addEventListener("keydown", clear);
+    return () => {
+      element.removeEventListener("click", select);
+      element.removeEventListener("keydown", clear);
+    };
+  }, [documentUri, model]);
   useEffect(() => {
     if (model === null) onRenderReady?.();
   }, [model, onRenderReady]);
   return (
-    <main>
+    <main ref={root} className="preview">
       {hasErrors && (
         <p role="alert">解析エラーがある。Problemsを確認すること。</p>
       )}
@@ -41,7 +76,11 @@ export function Preview(props: PreviewProps): ReactElement {
               </thead>
               <tbody>
                 {model.states.map((state) => (
-                  <tr key={state.id}>
+                  <tr
+                    key={state.id}
+                    data-state-id={state.id}
+                    data-state-selected={state.id === selectedStateId}
+                  >
                     <td>
                       <svg
                         className="state-swatch"
@@ -51,7 +90,15 @@ export function Preview(props: PreviewProps): ReactElement {
                         <rect width="1" height="1" fill={state.color} />
                       </svg>
                     </td>
-                    <td>{state.name}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="state-select"
+                        aria-pressed={state.id === selectedStateId}
+                      >
+                        {state.name}
+                      </button>
+                    </td>
                     <td className="state-meaning">{state.meaning}</td>
                   </tr>
                 ))}
@@ -61,8 +108,12 @@ export function Preview(props: PreviewProps): ReactElement {
               <p role="status">状態が定義されていない。</p>
             )}
           </section>
-          <StateDiagram model={model} onRenderReady={onRenderReady} />
-          <TransitionTable model={model} />
+          <StateDiagram
+            model={model}
+            selectedStateId={selectedStateId}
+            onRenderReady={onRenderReady}
+          />
+          <TransitionTable model={model} selectedStateId={selectedStateId} />
         </>
       )}
     </main>

@@ -19,16 +19,25 @@
   width: 100%;
 }
 .state-node {
+  --state-node-background: color-mix(
+    in srgb,
+    var(--state-color) var(--diagram-node-mix),
+    var(--diagram-background)
+  );
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 12px;
   width: 100%;
   overflow-wrap: anywhere;
+  background: var(--state-node-background);
+}
+
+.state-node[data-state-selected="true"] {
   background: color-mix(
     in srgb,
-    var(--state-color) var(--diagram-node-mix),
-    var(--diagram-background)
+    var(--state-selection-accent) var(--state-selection-mix),
+    var(--state-node-background)
   );
 }
 .state-node .react-flow__handle,
