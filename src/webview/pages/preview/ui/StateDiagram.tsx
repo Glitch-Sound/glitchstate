@@ -2,11 +2,13 @@
 import {
   getNodesBounds,
   getViewportForBounds,
+  type OnNodesChange,
   ReactFlow,
   ReactFlowProvider,
   useNodesInitialized,
   useReactFlow,
   useStore,
+  useUpdateNodeInternals,
 } from "@xyflow/react";
 import {
   type ReactElement,
@@ -17,7 +19,10 @@ import {
   useState,
 } from "react";
 import type { GlsModel } from "../../../../core";
-import { buildStateDiagram } from "../model/build-state-diagram";
+import {
+  buildStateDiagram,
+  type DiagramNode,
+} from "../model/build-state-diagram";
 import { connectDiagramEdges } from "../model/connect-diagram-edges";
 import { DIAGRAM_CONFIG as c } from "../model/diagram-config";
 import {
@@ -53,28 +58,34 @@ function DiagramCanvas({
 }) {
   const markerId = useId();
   const flow = useReactFlow();
-  const initialized = useNodesInitialized();
+  const initialized = useNodesInitialized({ includeHiddenNodes: true });
+  const updateNodeInternals = useUpdateNodeInternals();
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
   const zoom = useStore((state) => state.transform[2]);
   const [initialViewport] = useState(
     () => diagramViewportStore.getState().viewport ?? undefined,
   );
-  const heightKey = useStore((state) =>
-    graph.nodes
-      .map((node) => state.nodeLookup.get(node.id)?.measured.height ?? 0)
-      .join(","),
+  const [heights, setHeights] = useState<ReadonlyMap<string, number>>(
+    new Map(),
   );
-  const heights = useMemo(
-    () =>
-      new Map(
-        graph.nodes.map((node, i) => [
-          node.id,
-          Number(heightKey.split(",")[i]),
-        ]),
-      ),
-    [graph.nodes, heightKey],
-  );
+  const onNodesChange = useCallback<OnNodesChange<DiagramNode>>((changes) => {
+    setHeights((previous) => {
+      let next: Map<string, number> | undefined;
+      for (const change of changes) {
+        if (
+          change.type !== "dimensions" ||
+          !change.dimensions?.height ||
+          previous.get(change.id) === change.dimensions.height
+        )
+          continue;
+        // 制御ノードの更新で内部計測値が消えても、完了済みの計測を失わない。
+        next ??= new Map(previous);
+        next.set(change.id, change.dimensions.height);
+      }
+      return next ?? previous;
+    });
+  }, []);
   const [labels, setLabels] = useState<ReadonlyMap<string, number>>(new Map());
   const onLabelMeasured = useCallback((id: string, value: number) => {
     setLabels((previous) =>
@@ -104,6 +115,11 @@ function DiagramCanvas({
       node.type === "state" ? heights.get(node.id) : labels.get(node.id),
     ]),
   );
+  useEffect(() => {
+    // 配置の更新と計測の通知が前後しても、現在のDOMで接続点を確定する。
+    const measured = nodes.filter((node) => heights.has(node.id));
+    if (measured.length) updateNodeInternals(measured.map((node) => node.id));
+  }, [nodes, heights, updateNodeInternals]);
   const viewKey = `${generation}:${layoutKey}:${width}:${height}`;
   const [readyKey, setReadyKey] = useState<string>();
   useEffect(() => {
@@ -241,6 +257,7 @@ function DiagramCanvas({
                 .record(documentUri, generation, viewport);
           }}
           nodes={displayNodes}
+          onNodesChange={onNodesChange}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

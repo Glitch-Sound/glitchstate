@@ -734,6 +734,64 @@ async function releaseMeasurements(page: Page) {
 async function waitAck(page: Page, sequence: number) {
   await expect.poll(() => ackSequences(page)).toContain(sequence);
 }
+test("REQ-017-S01 REQ-017-S07 個別のノード計測の間に重複遷移を削除しても矢印と完了を保つ", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = window.ResizeObserver;
+    const pending: (() => void)[] = [];
+    let hold = true;
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          if (!hold) return callback(entries, observer);
+          const nodes = entries.filter((entry) =>
+            entry.target.classList.contains("react-flow__node"),
+          );
+          const others = entries.filter((entry) => !nodes.includes(entry));
+          if (others.length) callback(others, observer);
+          for (const entry of nodes)
+            pending.push(() => callback([entry], observer));
+        });
+      }
+    };
+    Object.assign(window, {
+      pendingNodeMeasurements: () => pending.length,
+      measureFirstNode: () => pending.shift()?.(),
+      measureRemainingNodes: () => {
+        hold = false;
+        for (const callback of pending.splice(0)) callback();
+      },
+    });
+  });
+  await start(page);
+  await update(page, duplicates);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as { pendingNodeMeasurements(): number }
+        ).pendingNodeMeasurements(),
+      ),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await page.evaluate(() =>
+    (window as unknown as { measureFirstNode(): void }).measureFirstNode(),
+  );
+  await expect(node(page, "Z_IDLE")).toBeVisible();
+  expect(await ackSequences(page)).toEqual([]);
+  await update(page, model, 2);
+  await page.evaluate(() =>
+    (
+      window as unknown as { measureRemainingNodes(): void }
+    ).measureRemainingNodes(),
+  );
+  await waitAck(page, 2);
+  await assertViews(page, ["待機", "実行中"], ["Z_IDLE:A_RUN"]);
+  await assertArrow(page, "Z_IDLE", "A_RUN");
+  await assertArrowheadFollowsPath(edge(page, "Z_IDLE", "A_RUN"));
+  expect(await ackSequences(page)).not.toContain(1);
+});
 test("REQ-017-S07 計測前に完了を送らず準備中の編集を最初の図に使う", async ({
   page,
 }) => {
